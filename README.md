@@ -1,6 +1,6 @@
 # Menu backend
 
-Phase 5 provides authenticated restaurant table management, secure QR generation, and public table-token resolution alongside the menu APIs. Prices use PostgreSQL `DECIMAL(10,2)`, unavailable items remain stored but are excluded from public menus, and category deletion is blocked while items remain assigned.
+Phase 6 provides guest cash ordering, secure order tracking, and authenticated restaurant order management alongside the table and menu APIs. Order lines snapshot item names and prices, and cash orders remain unpaid until a future collection workflow records payment.
 
 ## Setup
 
@@ -244,7 +244,75 @@ GET /api/public/tables/:qrToken
 
 This unauthenticated endpoint returns only the active restaurant name/slug and table label. Invalid tokens, inactive tables, and tables belonging to inactive restaurants return `404`.
 
-The authentication, restaurant, menu, and table tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
+## Ordering API
+
+Guest order creation requires no authentication:
+
+```http
+POST /api/public/orders
+Content-Type: application/json
+
+{
+  "tableQrToken": "random-public-table-token",
+  "paymentMethod": "CASH",
+  "customerName": "Sam",
+  "items": [
+    {
+      "menuItemId": "item-uuid",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+The server resolves the QR token to an active table and restaurant, revalidates every item against that restaurant’s current availability, calculates all subtotals and the total, and stores the item name and price snapshots. Client prices, subtotals, totals, restaurant IDs, and owner IDs are ignored because they are not accepted as trusted order fields.
+
+Successful creation returns an unguessable tracking token:
+
+```json
+{
+  "order": {
+    "orderId": "order-uuid",
+    "trackingToken": "random-order-tracking-token",
+    "status": "PENDING",
+    "paymentMethod": "CASH",
+    "paymentStatus": "PAYMENT_DUE",
+    "totalAmount": "25.00",
+    "items": [
+      {
+        "itemName": "Paneer Tikka",
+        "unitPrice": "12.50",
+        "quantity": 2,
+        "lineSubtotal": "25.00"
+      }
+    ]
+  }
+}
+```
+
+Use `GET /api/public/orders/:trackingToken` for customer tracking. The tracking token, not the order UUID, is the public bearer credential. The response excludes customer contact details and internal restaurant/table IDs.
+
+Owner order endpoints require `Authorization: Bearer <token>` and verify restaurant ownership:
+
+- `GET /api/restaurants/:restaurantId/orders?page=1&pageSize=20` lists orders newest first with pagination.
+- `GET /api/restaurants/:restaurantId/orders/:orderId` retrieves one order.
+- `PATCH /api/restaurants/:restaurantId/orders/:orderId/status` changes status through the server state machine.
+- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` sets an ISO `estimatedReadyAt` value or `null`.
+
+Allowed status transitions are:
+
+```text
+PENDING → ACCEPTED | REJECTED | CANCELLED
+ACCEPTED → PREPARING | CANCELLED
+PREPARING → READY | CANCELLED
+READY → COMPLETED
+```
+
+`REJECTED`, `CANCELLED`, and `COMPLETED` are terminal. Payment status is separate from order status; every new cash order starts as `PAYMENT_DUE`, and no order-status endpoint can mark it paid. A future dedicated cash-collection operation can update payment status.
+
+Order creation runs in a serializable Prisma transaction and retries serialization conflicts. Menu availability and prices are re-read inside that transaction; an unavailable or foreign item rejects the complete order, and item/order creation cannot partially commit.
+
+The authentication, restaurant, menu, table, and order tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
 
 ```sh
 npm test
