@@ -37,11 +37,13 @@ const orderSelect = {
   status: true,
   paymentMethod: true,
   paymentStatus: true,
+  paymentCollectedAt: true,
   totalAmount: true,
   trackingToken: true,
   customerName: true,
   customerContact: true,
   estimatedReadyAt: true,
+  completedAt: true,
   createdAt: true,
   updatedAt: true,
   items: { select: orderItemSelect, orderBy: { id: "asc" } }
@@ -120,10 +122,12 @@ function presentOrder(order, { includeTrackingToken = false } = {}) {
     status: order.status,
     paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
+    paymentCollectedAt: order.paymentCollectedAt,
     totalAmount: moneyString(order.totalAmount),
     customerName: order.customerName,
     customerContact: order.customerContact,
     estimatedReadyAt: order.estimatedReadyAt,
+    completedAt: order.completedAt,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     items: (order.items ?? []).map((item) => ({
@@ -288,6 +292,12 @@ export async function listOwnerOrders(ownerId, restaurantId, query) {
   }
 
   const where = { restaurantId };
+  if (query.status !== undefined) {
+    if (!orderStatuses.has(query.status)) {
+      throw new AppError("Invalid order status filter", 400);
+    }
+    where.status = query.status;
+  }
   const [total, orders] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
@@ -317,12 +327,18 @@ export async function updateOrderStatus(ownerId, restaurantId, orderId, input) {
     throw new AppError(`Cannot change order status from ${order.status} to ${input.status}`, 409);
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: input.status },
-    select: ownerOrderSelect
+  const result = await prisma.order.updateMany({
+    where: { id: orderId, restaurantId, status: order.status },
+    data: {
+      status: input.status,
+      ...(input.status === "COMPLETED" ? { completedAt: new Date() } : {})
+    }
   });
-  return presentOrder(updated);
+  if (result.count !== 1) {
+    throw new AppError("Order changed before this update could be applied", 409);
+  }
+
+  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
 }
 
 export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
@@ -338,10 +354,46 @@ export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
     if (Number.isNaN(estimatedReadyAt.getTime())) throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { estimatedReadyAt },
-    select: ownerOrderSelect
+  const result = await prisma.order.updateMany({
+    where: { id: orderId, restaurantId },
+    data: { estimatedReadyAt }
   });
-  return presentOrder(updated);
+  if (result.count !== 1) {
+    throw new AppError("Order changed before this update could be applied", 409);
+  }
+
+  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
+}
+
+export async function collectCashPayment(ownerId, restaurantId, orderId) {
+  const order = await ownedOrder(ownerId, restaurantId, orderId, {
+    id: true,
+    paymentMethod: true,
+    paymentStatus: true
+  });
+
+  if (order.paymentMethod !== "CASH") {
+    throw new AppError("Only cash orders can be collected through this endpoint", 400);
+  }
+  if (order.paymentStatus === "PAID") {
+    throw new AppError("Order payment has already been collected", 409);
+  }
+
+  const result = await prisma.order.updateMany({
+    where: {
+      id: orderId,
+      restaurantId,
+      paymentMethod: "CASH",
+      paymentStatus: "PAYMENT_DUE"
+    },
+    data: {
+      paymentStatus: "PAID",
+      paymentCollectedAt: new Date()
+    }
+  });
+  if (result.count !== 1) {
+    throw new AppError("Order payment changed before collection could be recorded", 409);
+  }
+
+  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
 }

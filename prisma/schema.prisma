@@ -115,11 +115,13 @@ model Order {
   status            OrderStatus   @default(PENDING)
   paymentMethod     PaymentMethod @default(CASH)
   paymentStatus     PaymentStatus @default(PAYMENT_DUE)
+  paymentCollectedAt DateTime?
   totalAmount       Decimal       @db.Decimal(10, 2)
   trackingToken     String        @unique
   customerName      String?
   customerContact   String?
   estimatedReadyAt  DateTime?
+  completedAt       DateTime?
   restaurant        Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   restaurantTable   RestaurantTable @relation(fields: [restaurantTableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items             OrderItem[]

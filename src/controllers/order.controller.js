@@ -1,4 +1,5 @@
 import {
+  collectCashPayment,
   getOwnerOrder,
   listOwnerOrders,
   updateOrderEta,
@@ -29,4 +30,8 @@ export const statusController = handle(async (request) => ({
 
 export const etaController = handle(async (request) => ({
   order: await updateOrderEta(request.auth.userId, request.params.restaurantId, request.params.orderId, request.body)
+}));
+
+export const paymentController = handle(async (request) => ({
+  order: await collectCashPayment(request.auth.userId, request.params.restaurantId, request.params.orderId)
 }));

@@ -1,6 +1,6 @@
 # Menu backend
 
-Phase 6 provides guest cash ordering, secure order tracking, and authenticated restaurant order management alongside the table and menu APIs. Order lines snapshot item names and prices, and cash orders remain unpaid until a future collection workflow records payment.
+Phase 7 provides restaurant operations for guest cash orders: filtered/paginated order queues, guarded lifecycle transitions, estimated preparation times, and explicit cash collection. Order lines snapshot item names and prices, and cash orders remain unpaid until collection is recorded.
 
 ## Setup
 
@@ -294,10 +294,11 @@ Use `GET /api/public/orders/:trackingToken` for customer tracking. The tracking 
 
 Owner order endpoints require `Authorization: Bearer <token>` and verify restaurant ownership:
 
-- `GET /api/restaurants/:restaurantId/orders?page=1&pageSize=20` lists orders newest first with pagination.
+- `GET /api/restaurants/:restaurantId/orders?page=1&pageSize=20&status=PENDING` lists orders newest first with pagination and an optional status filter. `pageSize` is limited to 100.
 - `GET /api/restaurants/:restaurantId/orders/:orderId` retrieves one order.
 - `PATCH /api/restaurants/:restaurantId/orders/:orderId/status` changes status through the server state machine.
-- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` sets an ISO `estimatedReadyAt` value or `null`.
+- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` accepts `{ "estimatedReadyAt": "2026-01-01T12:00:00.000Z" }` or `{ "estimatedReadyAt": null }`.
+- `PATCH /api/restaurants/:restaurantId/orders/:orderId/payment` records cash collection; it takes no client-supplied amount and cannot alter the order total.
 
 Allowed status transitions are:
 
@@ -308,9 +309,9 @@ PREPARING → READY | CANCELLED
 READY → COMPLETED
 ```
 
-`REJECTED`, `CANCELLED`, and `COMPLETED` are terminal. Payment status is separate from order status; every new cash order starts as `PAYMENT_DUE`, and no order-status endpoint can mark it paid. A future dedicated cash-collection operation can update payment status.
+`REJECTED`, `CANCELLED`, and `COMPLETED` are terminal. `completedAt` is set only when an order enters `COMPLETED`; `estimatedReadyAt` remains a separate expected timestamp. Payment status is separate from order status: every new cash order starts as `PAYMENT_DUE`, and collection sets `paymentStatus=PAID` plus `paymentCollectedAt`. Duplicate collection returns `409`, and order-status changes never mark payment collected.
 
-Order creation runs in a serializable Prisma transaction and retries serialization conflicts. Menu availability and prices are re-read inside that transaction; an unavailable or foreign item rejects the complete order, and item/order creation cannot partially commit.
+Order creation runs in a serializable Prisma transaction and retries serialization conflicts. Menu availability and prices are re-read inside that transaction; an unavailable or foreign item rejects the complete order, and item/order creation cannot partially commit. Status and payment writes use conditional `updateMany` predicates containing the previously observed status/payment state, so a concurrent dashboard request affects zero rows and returns `409` instead of silently overwriting the other update. This is optimistic compare-and-set protection; clients should refresh after a conflict.
 
 The authentication, restaurant, menu, table, and order tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
 

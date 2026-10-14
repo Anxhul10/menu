@@ -13,7 +13,8 @@ const database = vi.hoisted(() => ({
       findFirst: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
-      update: vi.fn()
+      update: vi.fn(),
+      updateMany: vi.fn()
     },
     orderItem: { create: vi.fn() },
     $transaction: vi.fn()
@@ -90,6 +91,7 @@ beforeEach(() => {
   database.prisma.order.findMany.mockResolvedValue([order()]);
   database.prisma.order.count.mockResolvedValue(1);
   database.prisma.order.update.mockResolvedValue(order({ status: "ACCEPTED" }));
+  database.prisma.order.updateMany.mockResolvedValue({ count: 1 });
 });
 
 const validOrder = () => ({
@@ -217,6 +219,25 @@ describe("owner order management", () => {
     }));
   });
 
+  it("filters order listings by status", async () => {
+    const response = await request(app)
+      .get(`/api/restaurants/${restaurantId}/orders?status=PREPARING`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(database.prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { restaurantId, status: "PREPARING" }
+    }));
+  });
+
+  it("rejects an invalid status filter", async () => {
+    const response = await request(app)
+      .get(`/api/restaurants/${restaurantId}/orders?status=UNKNOWN`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(400);
+  });
+
   it("enforces valid status transitions and keeps cash unpaid", async () => {
     const acceptedResponse = await request(app)
       .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/status`)
@@ -231,7 +252,19 @@ describe("owner order management", () => {
     expect(acceptedResponse.status).toBe(200);
     expect(acceptedResponse.body.order.paymentStatus).toBe("PAYMENT_DUE");
     expect(invalidResponse.status).toBe(409);
-    expect(database.prisma.order.update.mock.calls[0][0].data).toEqual({ status: "ACCEPTED" });
+    expect(database.prisma.order.updateMany.mock.calls[0][0].data).toEqual({ status: "ACCEPTED" });
+  });
+
+  it("rejects a concurrent status update when the stored status changed", async () => {
+    database.prisma.order.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/status`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ status: "ACCEPTED" });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toContain("changed");
   });
 
   it("updates estimated ready time and blocks cross-tenant access", async () => {
@@ -246,6 +279,58 @@ describe("owner order management", () => {
 
     expect(etaResponse.status).toBe(200);
     expect(crossTenantResponse.status).toBe(404);
+  });
+
+  it("rejects invalid ETA timestamps and prevents unrelated fields", async () => {
+    const invalidResponse = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/eta`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ estimatedReadyAt: "not-a-date", status: "COMPLETED" });
+
+    expect(invalidResponse.status).toBe(400);
+    expect(database.prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("records cash collection separately from order status", async () => {
+    database.prisma.order.findFirst
+      .mockResolvedValueOnce(order())
+      .mockResolvedValueOnce(order({ paymentStatus: "PAID", paymentCollectedAt: new Date() }));
+
+    const response = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/payment`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.order.paymentStatus).toBe("PAID");
+    expect(database.prisma.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ paymentStatus: "PAYMENT_DUE", paymentMethod: "CASH" }),
+      data: expect.objectContaining({ paymentStatus: "PAID", paymentCollectedAt: expect.any(Date) })
+    }));
+  });
+
+  it("rejects duplicate and non-cash collection attempts", async () => {
+    database.prisma.order.findFirst.mockResolvedValueOnce(order({ paymentStatus: "PAID" }));
+    const duplicateResponse = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/payment`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+    database.prisma.order.findFirst.mockResolvedValueOnce(order({ paymentMethod: "UPI" }));
+    const nonCashResponse = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/payment`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(duplicateResponse.status).toBe(409);
+    expect(nonCashResponse.status).toBe(400);
+  });
+
+  it("rejects a concurrent duplicate cash collection", async () => {
+    database.prisma.order.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/orders/${orderId}/payment`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toContain("changed");
   });
 
   it("requires authentication for owner order endpoints", async () => {
