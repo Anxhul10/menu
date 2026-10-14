@@ -150,7 +150,6 @@ export async function registerUser(input) {
       },
       select: restaurantSelect
     });
-
     return { user, restaurant };
   });
 

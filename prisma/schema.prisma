@@ -21,13 +21,16 @@ model User {
 }
 
 model Restaurant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String   @unique
-  ownerId   String   @db.Uuid
-  owner     User     @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  address     String?
+  isActive    Boolean  @default(true)
+  ownerId     String   @db.Uuid
+  owner       User     @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@index([ownerId])
+  @@index([ownerId, isActive])
 }
