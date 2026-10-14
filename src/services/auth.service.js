@@ -12,7 +12,7 @@ const safeUserSelect = {
   name: true,
   email: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 const restaurantSelect = {
   id: true,
@@ -20,7 +20,7 @@ const restaurantSelect = {
   slug: true,
   ownerId: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 
 function requiredText(value, field, minimumLength = 1) {
@@ -44,8 +44,15 @@ function normalizeRegistrationInput(input) {
   const name = requiredText(input.name, "name", 2);
   const email = requiredText(input.email, "email").toLowerCase();
   const password = input.password;
-  const restaurantName = requiredText(input.restaurantName, "restaurantName", 2);
-  const restaurantSlug = requiredText(input.restaurantSlug, "restaurantSlug").toLowerCase();
+  const restaurantName = requiredText(
+    input.restaurantName,
+    "restaurantName",
+    2,
+  );
+  const restaurantSlug = requiredText(
+    input.restaurantSlug,
+    "restaurantSlug",
+  ).toLowerCase();
 
   if (!emailPattern.test(email)) {
     throw new AppError("email is invalid", 400);
@@ -70,7 +77,11 @@ function normalizeLoginInput(input) {
   const email = requiredText(input.email, "email").toLowerCase();
   const password = input.password;
 
-  if (!emailPattern.test(email) || typeof password !== "string" || password.length === 0) {
+  if (
+    !emailPattern.test(email) ||
+    typeof password !== "string" ||
+    password.length === 0
+  ) {
     throw new AppError("Invalid email or password", 401);
   }
 
@@ -86,16 +97,12 @@ function getJwtSecret() {
 }
 
 function createAccessToken(userId) {
-  return jwt.sign(
-    { type: "access" },
-    getJwtSecret(),
-    {
-      subject: userId,
-      issuer: "menu-api",
-      audience: "menu-client",
-      expiresIn: env.jwtExpiresIn
-    }
-  );
+  return jwt.sign({ type: "access" }, getJwtSecret(), {
+    subject: userId,
+    issuer: "menu-api",
+    audience: "menu-client",
+    expiresIn: env.jwtExpiresIn,
+  });
 }
 
 function presentUser(user) {
@@ -104,7 +111,7 @@ function presentUser(user) {
     name: user.name,
     email: user.email,
     createdAt: user.createdAt,
-    updatedAt: user.updatedAt
+    updatedAt: user.updatedAt,
   };
 }
 
@@ -115,14 +122,14 @@ function presentRestaurant(restaurant) {
     slug: restaurant.slug,
     ownerId: restaurant.ownerId,
     createdAt: restaurant.createdAt,
-    updatedAt: restaurant.updatedAt
+    updatedAt: restaurant.updatedAt,
   };
 }
 
 function presentSession(user, restaurants) {
   return {
     user: presentUser(user),
-    restaurants: restaurants.map(presentRestaurant)
+    restaurants: restaurants.map(presentRestaurant),
   };
 }
 
@@ -136,27 +143,27 @@ export async function registerUser(input) {
       data: {
         name: data.name,
         email: data.email,
-        passwordHash: passwordHash
+        passwordHash: passwordHash,
       },
       select: {
-        ...safeUserSelect
-      }
+        ...safeUserSelect,
+      },
     });
 
     const restaurant = await transaction.restaurant.create({
       data: {
         name: data.restaurantName,
         slug: data.restaurantSlug,
-        ownerId: user.id
+        ownerId: user.id,
       },
-      select: restaurantSelect
+      select: restaurantSelect,
     });
     return { user, restaurant };
   });
 
   return {
     ...presentSession(result.user, [result.restaurant]),
-    token: createAccessToken(result.user.id)
+    token: createAccessToken(result.user.id),
   };
 }
 
@@ -168,19 +175,21 @@ export async function loginUser(input) {
     include: {
       ownedRestaurants: {
         select: restaurantSelect,
-        orderBy: { createdAt: "asc" }
-      }
-    }
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 
-  const passwordMatches = user ? await bcrypt.compare(data.password, user.passwordHash) : false;
+  const passwordMatches = user
+    ? await bcrypt.compare(data.password, user.passwordHash)
+    : false;
   if (!passwordMatches) {
     throw new AppError("Invalid email or password", 401);
   }
 
   return {
     ...presentSession(user, user.ownedRestaurants),
-    token: createAccessToken(user.id)
+    token: createAccessToken(user.id),
   };
 }
 
@@ -190,9 +199,9 @@ export async function getAuthenticatedProfile(userId) {
     include: {
       ownedRestaurants: {
         select: restaurantSelect,
-        orderBy: { createdAt: "asc" }
-      }
-    }
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 
   if (!user) {
@@ -206,10 +215,14 @@ export function verifyAccessToken(token) {
   try {
     const payload = jwt.verify(token, getJwtSecret(), {
       issuer: "menu-api",
-      audience: "menu-client"
+      audience: "menu-client",
     });
 
-    if (typeof payload !== "object" || payload.type !== "access" || typeof payload.sub !== "string") {
+    if (
+      typeof payload !== "object" ||
+      payload.type !== "access" ||
+      typeof payload.sub !== "string"
+    ) {
       throw new AppError("Invalid authentication token", 401);
     }
 

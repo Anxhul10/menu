@@ -2,15 +2,19 @@ import { Server } from "socket.io";
 import { env } from "../config/env.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { getRestaurant } from "../services/restaurant.service.js";
-import { getPublicOrder, getPublicOrderSession } from "../services/order.service.js";
+import {
+  getPublicOrder,
+  getPublicOrderSession,
+} from "../services/order.service.js";
 import {
   ORDER_CREATED,
   ORDER_ETA_UPDATED,
   ORDER_UPDATED,
-  orderEvents
+  orderEvents,
 } from "./order-events.js";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const trackingTokenPattern = /^[A-Za-z0-9_-]{32,100}$/;
 
 function restaurantRoom(restaurantId) {
@@ -30,7 +34,10 @@ function readSocketToken(socket) {
   if (typeof authToken === "string" && authToken.length > 0) return authToken;
 
   const authorization = socket.handshake.headers.authorization;
-  if (typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+  if (
+    typeof authorization === "string" &&
+    authorization.startsWith("Bearer ")
+  ) {
     return authorization.slice("Bearer ".length).trim();
   }
 
@@ -51,7 +58,11 @@ async function authorizeRestaurantSubscription(socket, input, acknowledgement) {
     return;
   }
 
-  if (!input || typeof input.restaurantId !== "string" || !uuidPattern.test(input.restaurantId)) {
+  if (
+    !input ||
+    typeof input.restaurantId !== "string" ||
+    !uuidPattern.test(input.restaurantId)
+  ) {
     acknowledge(acknowledgement, validationError("Restaurant not found"));
     return;
   }
@@ -62,15 +73,28 @@ async function authorizeRestaurantSubscription(socket, input, acknowledgement) {
     await socket.join(room);
     socket.data.restaurantRooms ??= new Set();
     socket.data.restaurantRooms.add(room);
-    acknowledge(acknowledgement, { ok: true, restaurantId: input.restaurantId });
+    acknowledge(acknowledgement, {
+      ok: true,
+      restaurantId: input.restaurantId,
+    });
   } catch (error) {
-    acknowledge(acknowledgement, validationError(error.statusCode === 404 ? "Restaurant not found" : "Unable to subscribe"));
+    acknowledge(
+      acknowledgement,
+      validationError(
+        error.statusCode === 404
+          ? "Restaurant not found"
+          : "Unable to subscribe",
+      ),
+    );
   }
 }
 
 async function subscribeToPublicOrder(socket, input, acknowledgement) {
   const trackingToken = input?.trackingToken;
-  if (typeof trackingToken !== "string" || !trackingTokenPattern.test(trackingToken)) {
+  if (
+    typeof trackingToken !== "string" ||
+    !trackingTokenPattern.test(trackingToken)
+  ) {
     acknowledge(acknowledgement, validationError("Order not found"));
     return;
   }
@@ -89,7 +113,10 @@ async function subscribeToPublicOrder(socket, input, acknowledgement) {
 
 async function subscribeToPublicOrderSession(socket, input, acknowledgement) {
   const orderingSessionToken = input?.orderingSessionToken;
-  if (!trackingTokenPattern.test(orderingSessionToken ?? "") || typeof input?.tableQrToken !== "string") {
+  if (
+    !trackingTokenPattern.test(orderingSessionToken ?? "") ||
+    typeof input?.tableQrToken !== "string"
+  ) {
     acknowledge(acknowledgement, validationError("Order session not found"));
     return;
   }
@@ -107,20 +134,32 @@ async function subscribeToPublicOrderSession(socket, input, acknowledgement) {
 
 function registerEventForwarders(io) {
   const forward = (eventName, payload) => {
-    io.to(restaurantRoom(payload.restaurantId)).emit(eventName, payload.ownerOrder);
-    io.to(orderRoom(payload.trackingToken)).emit(eventName, payload.publicOrder);
-    if (payload.orderingSessionToken) io.to(orderSessionRoom(payload.orderingSessionToken)).emit(eventName, payload.publicOrder);
+    io.to(restaurantRoom(payload.restaurantId)).emit(
+      eventName,
+      payload.ownerOrder,
+    );
+    io.to(orderRoom(payload.trackingToken)).emit(
+      eventName,
+      payload.publicOrder,
+    );
+    if (payload.orderingSessionToken)
+      io.to(orderSessionRoom(payload.orderingSessionToken)).emit(
+        eventName,
+        payload.publicOrder,
+      );
   };
 
   const handlers = new Map([
     [ORDER_CREATED, (payload) => forward(ORDER_CREATED, payload)],
     [ORDER_UPDATED, (payload) => forward(ORDER_UPDATED, payload)],
-    [ORDER_ETA_UPDATED, (payload) => forward(ORDER_ETA_UPDATED, payload)]
+    [ORDER_ETA_UPDATED, (payload) => forward(ORDER_ETA_UPDATED, payload)],
   ]);
 
-  for (const [eventName, handler] of handlers) orderEvents.on(eventName, handler);
+  for (const [eventName, handler] of handlers)
+    orderEvents.on(eventName, handler);
   return () => {
-    for (const [eventName, handler] of handlers) orderEvents.off(eventName, handler);
+    for (const [eventName, handler] of handlers)
+      orderEvents.off(eventName, handler);
   };
 }
 
@@ -128,8 +167,8 @@ export function createRealtimeServer(httpServer) {
   const io = new Server(httpServer, {
     cors: {
       origin: env.corsOrigins,
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+    },
   });
 
   io.use((socket, next) => {
@@ -151,7 +190,10 @@ export function createRealtimeServer(httpServer) {
     });
 
     socket.on("restaurant:unsubscribe", async (input, acknowledgement) => {
-      if (typeof input?.restaurantId === "string" && uuidPattern.test(input.restaurantId)) {
+      if (
+        typeof input?.restaurantId === "string" &&
+        uuidPattern.test(input.restaurantId)
+      ) {
         const room = restaurantRoom(input.restaurantId);
         await socket.leave(room);
         socket.data.restaurantRooms?.delete(room);

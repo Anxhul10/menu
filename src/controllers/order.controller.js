@@ -3,7 +3,7 @@ import {
   getOwnerOrder,
   listOwnerOrders,
   updateOrderEta,
-  updateOrderStatus
+  updateOrderStatus,
 } from "../services/order.service.js";
 
 function handle(operation, statusCode = 200) {
@@ -17,21 +17,43 @@ function handle(operation, statusCode = 200) {
 }
 
 export const listOrdersController = handle(async (request) => ({
-  ...(await listOwnerOrders(request.auth.userId, request.params.restaurantId, request.query))
+  ...(await listOwnerOrders(
+    request.auth.userId,
+    request.params.restaurantId,
+    request.query,
+  )),
 }));
 
 export const getOrderController = handle(async (request) => ({
-  order: await getOwnerOrder(request.auth.userId, request.params.restaurantId, request.params.orderId)
+  order: await getOwnerOrder(
+    request.auth.userId,
+    request.params.restaurantId,
+    request.params.orderId,
+  ),
 }));
 
 export const statusController = handle(async (request) => ({
-  order: await updateOrderStatus(request.auth.userId, request.params.restaurantId, request.params.orderId, request.body)
+  order: await updateOrderStatus(
+    request.auth.userId,
+    request.params.restaurantId,
+    request.params.orderId,
+    request.body,
+  ),
 }));
 
 export const etaController = handle(async (request) => ({
-  order: await updateOrderEta(request.auth.userId, request.params.restaurantId, request.params.orderId, request.body)
+  order: await updateOrderEta(
+    request.auth.userId,
+    request.params.restaurantId,
+    request.params.orderId,
+    request.body,
+  ),
 }));
 
 export const paymentController = handle(async (request) => ({
-  order: await collectCashPayment(request.auth.userId, request.params.restaurantId, request.params.orderId)
+  order: await collectCashPayment(
+    request.auth.userId,
+    request.params.restaurantId,
+    request.params.orderId,
+  ),
 }));

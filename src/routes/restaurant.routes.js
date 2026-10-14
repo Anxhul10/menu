@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { requireAuthentication } from "../middleware/auth.middleware.js";
-import { create, get, list, remove, update } from "../controllers/restaurant.controller.js";
+import {
+  create,
+  get,
+  list,
+  remove,
+  update,
+} from "../controllers/restaurant.controller.js";
 
 const restaurantRouter = Router();
 

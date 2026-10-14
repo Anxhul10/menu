@@ -3,7 +3,8 @@ import { prisma } from "../database/prisma.js";
 import { AppError } from "../errors/app-error.js";
 import { getRestaurant } from "./restaurant.service.js";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const pricePattern = /^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/;
 const categoryFields = {
   id: true,
@@ -12,7 +13,7 @@ const categoryFields = {
   description: true,
   sortOrder: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 const itemFields = {
   id: true,
@@ -24,10 +25,17 @@ const itemFields = {
   imageUrl: true,
   isAvailable: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 const categoryUpdateFields = new Set(["name", "description", "sortOrder"]);
-const itemUpdateFields = new Set(["categoryId", "name", "description", "price", "imageUrl", "isAvailable"]);
+const itemUpdateFields = new Set([
+  "categoryId",
+  "name",
+  "description",
+  "price",
+  "imageUrl",
+  "isAvailable",
+]);
 
 function validateId(value, resourceName) {
   if (typeof value !== "string" || !uuidPattern.test(value)) {
@@ -51,8 +59,15 @@ function text(value, field, { required = false, maximumLength = 500 } = {}) {
     return null;
   }
 
-  if (typeof value !== "string" || value.trim().length === 0 || value.trim().length > maximumLength) {
-    throw new AppError(`${field} must be a non-empty string of at most ${maximumLength} characters`, 400);
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.trim().length > maximumLength
+  ) {
+    throw new AppError(
+      `${field} must be a non-empty string of at most ${maximumLength} characters`,
+      400,
+    );
   }
 
   return value.trim();
@@ -64,7 +79,10 @@ function optionalText(value, field, maximumLength = 500) {
   }
 
   if (typeof value !== "string" || value.trim().length > maximumLength) {
-    throw new AppError(`${field} must be a string of at most ${maximumLength} characters`, 400);
+    throw new AppError(
+      `${field} must be a string of at most ${maximumLength} characters`,
+      400,
+    );
   }
 
   const normalizedValue = value.trim();
@@ -85,7 +103,10 @@ function sortOrder(value) {
 
 function price(value) {
   if (typeof value !== "string" || !pricePattern.test(value.trim())) {
-    throw new AppError("price must be a non-negative decimal with at most 2 decimal places", 400);
+    throw new AppError(
+      "price must be a non-negative decimal with at most 2 decimal places",
+      400,
+    );
   }
 
   return new Prisma.Decimal(value).toFixed(2);
@@ -97,12 +118,15 @@ function imageUrl(value) {
   }
 
   if (typeof value !== "string" || value.trim().length > 2048) {
-    throw new AppError("imageUrl must be a URL of at most 2048 characters", 400);
+    throw new AppError(
+      "imageUrl must be a URL of at most 2048 characters",
+      400,
+    );
   }
 
   try {
     const parsedUrl = new URL(value.trim());
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
       throw new Error("unsupported protocol");
     }
   } catch {
@@ -120,7 +144,7 @@ function presentCategory(category) {
   return {
     ...category,
     createdAt: category.createdAt,
-    updatedAt: category.updatedAt
+    updatedAt: category.updatedAt,
   };
 }
 
@@ -129,7 +153,7 @@ function presentItem(item) {
     ...item,
     price: formatPrice(item.price),
     createdAt: item.createdAt,
-    updatedAt: item.updatedAt
+    updatedAt: item.updatedAt,
   };
 }
 
@@ -142,9 +166,9 @@ async function ownedCategory(ownerId, restaurantId, categoryId) {
   const category = await prisma.menuCategory.findFirst({
     where: {
       id: validateId(categoryId, "Category"),
-      restaurantId
+      restaurantId,
     },
-    select: categoryFields
+    select: categoryFields,
   });
 
   if (!category) {
@@ -159,9 +183,9 @@ async function ownedItem(ownerId, restaurantId, itemId) {
   const item = await prisma.menuItem.findFirst({
     where: {
       id: validateId(itemId, "Menu item"),
-      restaurantId
+      restaurantId,
     },
-    select: itemFields
+    select: itemFields,
   });
 
   if (!item) {
@@ -175,15 +199,17 @@ export async function createCategory(ownerId, restaurantId, input) {
   requireObject(input);
   await ownedRestaurant(ownerId, restaurantId);
 
-  return prisma.menuCategory.create({
-    data: {
-      restaurantId,
-      name: text(input.name, "name", { required: true, maximumLength: 100 }),
-      description: optionalText(input.description, "description"),
-      sortOrder: sortOrder(input.sortOrder)
-    },
-    select: categoryFields
-  }).then(presentCategory);
+  return prisma.menuCategory
+    .create({
+      data: {
+        restaurantId,
+        name: text(input.name, "name", { required: true, maximumLength: 100 }),
+        description: optionalText(input.description, "description"),
+        sortOrder: sortOrder(input.sortOrder),
+      },
+      select: categoryFields,
+    })
+    .then(presentCategory);
 }
 
 export async function listCategories(ownerId, restaurantId) {
@@ -191,7 +217,7 @@ export async function listCategories(ownerId, restaurantId) {
   const categories = await prisma.menuCategory.findMany({
     where: { restaurantId },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    select: categoryFields
+    select: categoryFields,
   });
 
   return categories.map(presentCategory);
@@ -201,7 +227,9 @@ export async function updateCategory(ownerId, restaurantId, categoryId, input) {
   await ownedCategory(ownerId, restaurantId, categoryId);
   requireObject(input);
   const fields = Object.keys(input);
-  const unsupportedField = fields.find((field) => !categoryUpdateFields.has(field));
+  const unsupportedField = fields.find(
+    (field) => !categoryUpdateFields.has(field),
+  );
   if (unsupportedField) {
     throw new AppError(`${unsupportedField} cannot be updated`, 400);
   }
@@ -210,23 +238,34 @@ export async function updateCategory(ownerId, restaurantId, categoryId, input) {
   }
 
   const data = {};
-  if (input.name !== undefined) data.name = text(input.name, "name", { required: true, maximumLength: 100 });
-  if (input.description !== undefined) data.description = optionalText(input.description, "description");
-  if (input.sortOrder !== undefined) data.sortOrder = sortOrder(input.sortOrder);
+  if (input.name !== undefined)
+    data.name = text(input.name, "name", {
+      required: true,
+      maximumLength: 100,
+    });
+  if (input.description !== undefined)
+    data.description = optionalText(input.description, "description");
+  if (input.sortOrder !== undefined)
+    data.sortOrder = sortOrder(input.sortOrder);
 
   const category = await prisma.menuCategory.update({
     where: { id: categoryId },
     data,
-    select: categoryFields
+    select: categoryFields,
   });
   return presentCategory(category);
 }
 
 export async function deleteCategory(ownerId, restaurantId, categoryId) {
   await ownedCategory(ownerId, restaurantId, categoryId);
-  const itemCount = await prisma.menuItem.count({ where: { categoryId, restaurantId } });
+  const itemCount = await prisma.menuItem.count({
+    where: { categoryId, restaurantId },
+  });
   if (itemCount > 0) {
-    throw new AppError("Category cannot be deleted while it contains menu items", 409);
+    throw new AppError(
+      "Category cannot be deleted while it contains menu items",
+      409,
+    );
   }
 
   await prisma.menuCategory.delete({ where: { id: categoryId } });
@@ -236,12 +275,16 @@ export async function createItem(ownerId, restaurantId, input) {
   requireObject(input);
   await ownedRestaurant(ownerId, restaurantId);
   const categoryId = validateId(input.categoryId, "Category");
-  const category = await prisma.menuCategory.findFirst({ where: { id: categoryId, restaurantId }, select: { id: true } });
+  const category = await prisma.menuCategory.findFirst({
+    where: { id: categoryId, restaurantId },
+    select: { id: true },
+  });
   if (!category) {
     throw new AppError("Category not found for this restaurant", 400);
   }
 
-  const isAvailable = input.isAvailable === undefined ? true : input.isAvailable;
+  const isAvailable =
+    input.isAvailable === undefined ? true : input.isAvailable;
   if (typeof isAvailable !== "boolean") {
     throw new AppError("isAvailable must be a boolean", 400);
   }
@@ -254,9 +297,9 @@ export async function createItem(ownerId, restaurantId, input) {
       description: optionalText(input.description, "description"),
       price: price(input.price),
       imageUrl: imageUrl(input.imageUrl),
-      isAvailable
+      isAvailable,
     },
-    select: itemFields
+    select: itemFields,
   });
 
   return presentItem(item);
@@ -267,7 +310,7 @@ export async function listItems(ownerId, restaurantId) {
   const items = await prisma.menuItem.findMany({
     where: { restaurantId },
     orderBy: [{ categoryId: "asc" }, { createdAt: "asc" }],
-    select: itemFields
+    select: itemFields,
   });
   return items.map(presentItem);
 }
@@ -291,20 +334,34 @@ export async function updateItem(ownerId, restaurantId, itemId, input) {
   const data = {};
   if (input.categoryId !== undefined) {
     const categoryId = validateId(input.categoryId, "Category");
-    const category = await prisma.menuCategory.findFirst({ where: { id: categoryId, restaurantId }, select: { id: true } });
-    if (!category) throw new AppError("Category not found for this restaurant", 400);
+    const category = await prisma.menuCategory.findFirst({
+      where: { id: categoryId, restaurantId },
+      select: { id: true },
+    });
+    if (!category)
+      throw new AppError("Category not found for this restaurant", 400);
     data.categoryId = categoryId;
   }
-  if (input.name !== undefined) data.name = text(input.name, "name", { required: true, maximumLength: 150 });
-  if (input.description !== undefined) data.description = optionalText(input.description, "description");
+  if (input.name !== undefined)
+    data.name = text(input.name, "name", {
+      required: true,
+      maximumLength: 150,
+    });
+  if (input.description !== undefined)
+    data.description = optionalText(input.description, "description");
   if (input.price !== undefined) data.price = price(input.price);
   if (input.imageUrl !== undefined) data.imageUrl = imageUrl(input.imageUrl);
   if (input.isAvailable !== undefined) {
-    if (typeof input.isAvailable !== "boolean") throw new AppError("isAvailable must be a boolean", 400);
+    if (typeof input.isAvailable !== "boolean")
+      throw new AppError("isAvailable must be a boolean", 400);
     data.isAvailable = input.isAvailable;
   }
 
-  const item = await prisma.menuItem.update({ where: { id: itemId }, data, select: itemFields });
+  const item = await prisma.menuItem.update({
+    where: { id: itemId },
+    data,
+    select: itemFields,
+  });
   return presentItem(item);
 }
 
@@ -313,7 +370,12 @@ export async function deleteItem(ownerId, restaurantId, itemId) {
   await prisma.menuItem.delete({ where: { id: itemId } });
 }
 
-export async function setItemAvailability(ownerId, restaurantId, itemId, input) {
+export async function setItemAvailability(
+  ownerId,
+  restaurantId,
+  itemId,
+  input,
+) {
   await ownedItem(ownerId, restaurantId, itemId);
   requireObject(input);
   if (typeof input.isAvailable !== "boolean") {
@@ -323,7 +385,7 @@ export async function setItemAvailability(ownerId, restaurantId, itemId, input) 
   const item = await prisma.menuItem.update({
     where: { id: itemId },
     data: { isAvailable: input.isAvailable },
-    select: itemFields
+    select: itemFields,
   });
   return presentItem(item);
 }
@@ -355,12 +417,12 @@ export async function getPublicMenu(slug) {
               description: true,
               price: true,
               imageUrl: true,
-              isAvailable: true
-            }
-          }
-        }
-      }
-    }
+              isAvailable: true,
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!restaurant) {
@@ -370,7 +432,7 @@ export async function getPublicMenu(slug) {
   return {
     restaurant: {
       name: restaurant.name,
-      slug: restaurant.slug
+      slug: restaurant.slug,
     },
     categories: restaurant.categories.map((category) => ({
       id: category.id,
@@ -384,8 +446,8 @@ export async function getPublicMenu(slug) {
         description: item.description,
         price: formatPrice(item.price),
         imageUrl: item.imageUrl,
-        isAvailable: item.isAvailable
-      }))
-    }))
+        isAvailable: item.isAvailable,
+      })),
+    })),
   };
 }

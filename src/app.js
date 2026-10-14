@@ -15,17 +15,19 @@ import { env } from "./config/env.js";
 
 export const app = express();
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || env.corsOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || env.corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-    return callback(null, false);
-  },
-  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+      return callback(null, false);
+    },
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 app.use(express.json());
 app.use("/api", healthRouter);
 app.use("/api/auth", authRouter);

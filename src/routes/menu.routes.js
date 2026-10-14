@@ -10,7 +10,7 @@ import {
   listCategoriesController,
   listItemsController,
   updateCategoryController,
-  updateItemController
+  updateItemController,
 } from "../controllers/menu.controller.js";
 
 const menuRouter = Router();
@@ -18,13 +18,22 @@ const menuRouter = Router();
 menuRouter.use(requireAuthentication);
 menuRouter.post("/:restaurantId/categories", createCategoryController);
 menuRouter.get("/:restaurantId/categories", listCategoriesController);
-menuRouter.patch("/:restaurantId/categories/:categoryId", updateCategoryController);
-menuRouter.delete("/:restaurantId/categories/:categoryId", deleteCategoryController);
+menuRouter.patch(
+  "/:restaurantId/categories/:categoryId",
+  updateCategoryController,
+);
+menuRouter.delete(
+  "/:restaurantId/categories/:categoryId",
+  deleteCategoryController,
+);
 menuRouter.post("/:restaurantId/items", createItemController);
 menuRouter.get("/:restaurantId/items", listItemsController);
 menuRouter.get("/:restaurantId/items/:itemId", getItemController);
 menuRouter.patch("/:restaurantId/items/:itemId", updateItemController);
 menuRouter.delete("/:restaurantId/items/:itemId", deleteItemController);
-menuRouter.patch("/:restaurantId/items/:itemId/availability", availabilityController);
+menuRouter.patch(
+  "/:restaurantId/items/:itemId/availability",
+  availabilityController,
+);
 
 export default menuRouter;

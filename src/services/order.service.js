@@ -3,11 +3,25 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../database/prisma.js";
 import { AppError } from "../errors/app-error.js";
 import { getRestaurant } from "./restaurant.service.js";
-import { ORDER_CREATED, ORDER_ETA_UPDATED, ORDER_UPDATED, publishOrderEvent } from "../realtime/order-events.js";
+import {
+  ORDER_CREATED,
+  ORDER_ETA_UPDATED,
+  ORDER_UPDATED,
+  publishOrderEvent,
+} from "../realtime/order-events.js";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const publicTokenPattern = /^[A-Za-z0-9_-]{32,100}$/;
-const orderStatuses = new Set(["PENDING", "ACCEPTED", "REJECTED", "PREPARING", "READY", "COMPLETED", "CANCELLED"]);
+const orderStatuses = new Set([
+  "PENDING",
+  "ACCEPTED",
+  "REJECTED",
+  "PREPARING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+]);
 const transitions = {
   PENDING: new Set(["ACCEPTED", "REJECTED", "CANCELLED"]),
   ACCEPTED: new Set(["PREPARING", "CANCELLED"]),
@@ -15,14 +29,14 @@ const transitions = {
   READY: new Set(["COMPLETED"]),
   REJECTED: new Set(),
   COMPLETED: new Set(),
-  CANCELLED: new Set()
+  CANCELLED: new Set(),
 };
 const menuItemSelect = {
   id: true,
   restaurantId: true,
   name: true,
   price: true,
-  isAvailable: true
+  isAvailable: true,
 };
 const orderItemSelect = {
   id: true,
@@ -30,7 +44,7 @@ const orderItemSelect = {
   itemName: true,
   unitPrice: true,
   quantity: true,
-  lineSubtotal: true
+  lineSubtotal: true,
 };
 const orderSelect = {
   id: true,
@@ -50,11 +64,11 @@ const orderSelect = {
   completedAt: true,
   createdAt: true,
   updatedAt: true,
-  items: { select: orderItemSelect, orderBy: { id: "asc" } }
+  items: { select: orderItemSelect, orderBy: { id: "asc" } },
 };
 const ownerOrderSelect = {
   ...orderSelect,
-  restaurantTable: { select: { tableNumber: true } }
+  restaurantTable: { select: { tableNumber: true } },
 };
 
 function validateId(value, resourceName) {
@@ -73,8 +87,15 @@ function requireObject(input) {
 
 function optionalCustomerText(value, field) {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value.trim().length === 0 || value.trim().length > 200) {
-    throw new AppError(`${field} must be a non-empty string of at most 200 characters`, 400);
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.trim().length > 200
+  ) {
+    throw new AppError(
+      `${field} must be a non-empty string of at most 200 characters`,
+      400,
+    );
   }
   return value.trim();
 }
@@ -85,16 +106,32 @@ function normalizeOrderInput(input) {
   if (paymentMethod !== "CASH") {
     throw new AppError("Only CASH payment is supported", 400);
   }
-  if (!Array.isArray(input.items) || input.items.length === 0 || input.items.length > 50) {
+  if (
+    !Array.isArray(input.items) ||
+    input.items.length === 0 ||
+    input.items.length > 50
+  ) {
     throw new AppError("items must contain between 1 and 50 entries", 400);
   }
 
   const items = input.items.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry) || !uuidPattern.test(entry.menuItemId ?? "")) {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      Array.isArray(entry) ||
+      !uuidPattern.test(entry.menuItemId ?? "")
+    ) {
       throw new AppError("Each item must contain a valid menuItemId", 400);
     }
-    if (!Number.isInteger(entry.quantity) || entry.quantity < 1 || entry.quantity > 99) {
-      throw new AppError("Each item quantity must be an integer between 1 and 99", 400);
+    if (
+      !Number.isInteger(entry.quantity) ||
+      entry.quantity < 1 ||
+      entry.quantity > 99
+    ) {
+      throw new AppError(
+        "Each item quantity must be an integer between 1 and 99",
+        400,
+      );
     }
     return { menuItemId: entry.menuItemId, quantity: entry.quantity };
   });
@@ -106,7 +143,10 @@ function normalizeOrderInput(input) {
   return {
     items,
     customerName: optionalCustomerText(input.customerName, "customerName"),
-    customerContact: optionalCustomerText(input.customerContact, "customerContact")
+    customerContact: optionalCustomerText(
+      input.customerContact,
+      "customerContact",
+    ),
   };
 }
 
@@ -118,7 +158,10 @@ function moneyString(value) {
   return money(value).toFixed(2);
 }
 
-function presentOrder(order, { includeTrackingToken = false, includeOrderingSessionToken = false } = {}) {
+function presentOrder(
+  order,
+  { includeTrackingToken = false, includeOrderingSessionToken = false } = {},
+) {
   const result = {
     orderId: order.id,
     restaurantId: order.restaurantId,
@@ -141,13 +184,15 @@ function presentOrder(order, { includeTrackingToken = false, includeOrderingSess
       itemName: item.itemName,
       unitPrice: moneyString(item.unitPrice),
       quantity: item.quantity,
-      lineSubtotal: moneyString(item.lineSubtotal)
-    }))
+      lineSubtotal: moneyString(item.lineSubtotal),
+    })),
   };
 
   if (includeTrackingToken) result.trackingToken = order.trackingToken;
-  if (includeOrderingSessionToken) result.orderingSessionToken = order.orderingSessionToken;
-  if (order.restaurantTable?.tableNumber) result.tableNumber = order.restaurantTable.tableNumber;
+  if (includeOrderingSessionToken)
+    result.orderingSessionToken = order.orderingSessionToken;
+  if (order.restaurantTable?.tableNumber)
+    result.tableNumber = order.restaurantTable.tableNumber;
   return result;
 }
 
@@ -155,7 +200,7 @@ async function publishPersistedOrder(orderId, eventName) {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: ownerOrderSelect
+      select: ownerOrderSelect,
     });
     if (!order) return;
 
@@ -166,7 +211,7 @@ async function publishPersistedOrder(orderId, eventName) {
       trackingToken: order.trackingToken,
       orderingSessionToken: order.orderingSessionToken,
       ownerOrder,
-      publicOrder
+      publicOrder,
     });
   } catch (error) {
     console.error("Unable to publish order update", error.message);
@@ -174,7 +219,11 @@ async function publishPersistedOrder(orderId, eventName) {
 }
 
 async function activeTableByToken(transaction, tableQrToken) {
-  if (typeof tableQrToken !== "string" || tableQrToken.length < 32 || tableQrToken.length > 100) {
+  if (
+    typeof tableQrToken !== "string" ||
+    tableQrToken.length < 32 ||
+    tableQrToken.length > 100
+  ) {
     throw new AppError("Invalid or inactive table QR token", 400);
   }
 
@@ -182,14 +231,14 @@ async function activeTableByToken(transaction, tableQrToken) {
     where: {
       qrToken: tableQrToken,
       isActive: true,
-      restaurant: { isActive: true }
+      restaurant: { isActive: true },
     },
     select: {
       id: true,
       restaurantId: true,
       isOccupied: true,
-      activeOrderingSessionToken: true
-    }
+      activeOrderingSessionToken: true,
+    },
   });
 
   if (!table) {
@@ -201,10 +250,17 @@ async function activeTableByToken(transaction, tableQrToken) {
 
 async function createOrderTransaction(transaction, input) {
   const table = await activeTableByToken(transaction, input.tableQrToken);
-  const orderingSessionToken = input.orderingSessionToken ?? randomBytes(32).toString("base64url");
+  const orderingSessionToken =
+    input.orderingSessionToken ?? randomBytes(32).toString("base64url");
   if (input.orderingSessionToken) {
-    if (!table.isOccupied || table.activeOrderingSessionToken !== input.orderingSessionToken) {
-      throw new AppError("Ordering session has expired; scan the table again", 409);
+    if (
+      !table.isOccupied ||
+      table.activeOrderingSessionToken !== input.orderingSessionToken
+    ) {
+      throw new AppError(
+        "Ordering session has expired; scan the table again",
+        409,
+      );
     }
   } else if (table.isOccupied) {
     throw new AppError("This table already has an active dining session", 409);
@@ -213,13 +269,16 @@ async function createOrderTransaction(transaction, input) {
     where: {
       id: { in: input.order.items.map((entry) => entry.menuItemId) },
       restaurantId: table.restaurantId,
-      isAvailable: true
+      isAvailable: true,
     },
-    select: menuItemSelect
+    select: menuItemSelect,
   });
 
   if (menuItems.length !== input.order.items.length) {
-    throw new AppError("One or more menu items are unavailable or invalid", 400);
+    throw new AppError(
+      "One or more menu items are unavailable or invalid",
+      400,
+    );
   }
 
   const menuItemsById = new Map(menuItems.map((item) => [item.id, item]));
@@ -234,7 +293,7 @@ async function createOrderTransaction(transaction, input) {
       itemName: menuItem.name,
       unitPrice,
       quantity: requestedItem.quantity,
-      lineSubtotal
+      lineSubtotal,
     };
   });
 
@@ -249,26 +308,42 @@ async function createOrderTransaction(transaction, input) {
       trackingToken: randomBytes(32).toString("base64url"),
       orderingSessionToken,
       customerName: input.order.customerName,
-      customerContact: input.order.customerContact
+      customerContact: input.order.customerContact,
     },
-    select: { ...orderSelect, items: false }
+    select: { ...orderSelect, items: false },
   });
 
   const items = [];
   for (const snapshot of snapshots) {
-    items.push(await transaction.orderItem.create({
-      data: { orderId: order.id, ...snapshot },
-      select: orderItemSelect
-    }));
+    items.push(
+      await transaction.orderItem.create({
+        data: { orderId: order.id, ...snapshot },
+        select: orderItemSelect,
+      }),
+    );
   }
 
   const occupancy = await transaction.restaurantTable.updateMany({
     where: input.orderingSessionToken
-      ? { id: table.id, isActive: true, isOccupied: true, activeOrderingSessionToken: orderingSessionToken }
-      : { id: table.id, isActive: true, isOccupied: false, activeOrderingSessionToken: null },
-    data: { isOccupied: true, activeOrderingSessionToken: orderingSessionToken }
+      ? {
+          id: table.id,
+          isActive: true,
+          isOccupied: true,
+          activeOrderingSessionToken: orderingSessionToken,
+        }
+      : {
+          id: table.id,
+          isActive: true,
+          isOccupied: false,
+          activeOrderingSessionToken: null,
+        },
+    data: {
+      isOccupied: true,
+      activeOrderingSessionToken: orderingSessionToken,
+    },
   });
-  if (occupancy.count !== 1) throw new AppError("Table changed before the order could be created", 409);
+  if (occupancy.count !== 1)
+    throw new AppError("Table changed before the order could be created", 409);
 
   return { ...order, items };
 }
@@ -279,18 +354,30 @@ export async function createPublicOrder(input) {
     throw new AppError("tableQrToken is required", 400);
   }
   const orderingSessionToken = input.orderingSessionToken;
-  if (orderingSessionToken !== undefined && (typeof orderingSessionToken !== "string" || !publicTokenPattern.test(orderingSessionToken))) {
+  if (
+    orderingSessionToken !== undefined &&
+    (typeof orderingSessionToken !== "string" ||
+      !publicTokenPattern.test(orderingSessionToken))
+  ) {
     throw new AppError("Invalid ordering session", 400);
   }
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const order = await prisma.$transaction(
-        (transaction) => createOrderTransaction(transaction, { tableQrToken: input.tableQrToken, orderingSessionToken, order: orderInput }),
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+        (transaction) =>
+          createOrderTransaction(transaction, {
+            tableQrToken: input.tableQrToken,
+            orderingSessionToken,
+            order: orderInput,
+          }),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
       await publishPersistedOrder(order.id, ORDER_CREATED);
-      return presentOrder(order, { includeTrackingToken: true, includeOrderingSessionToken: true });
+      return presentOrder(order, {
+        includeTrackingToken: true,
+        includeOrderingSessionToken: true,
+      });
     } catch (error) {
       if (error.code !== "P2034" || attempt === 2) throw error;
     }
@@ -298,7 +385,11 @@ export async function createPublicOrder(input) {
 }
 
 export async function getPublicOrder(trackingToken) {
-  if (typeof trackingToken !== "string" || trackingToken.length < 32 || trackingToken.length > 100) {
+  if (
+    typeof trackingToken !== "string" ||
+    trackingToken.length < 32 ||
+    trackingToken.length > 100
+  ) {
     throw new AppError("Order not found", 404);
   }
 
@@ -307,8 +398,8 @@ export async function getPublicOrder(trackingToken) {
     select: {
       ...orderSelect,
       restaurant: { select: { name: true, slug: true } },
-      restaurantTable: { select: { tableNumber: true } }
-    }
+      restaurantTable: { select: { tableNumber: true } },
+    },
   });
   if (!order) throw new AppError("Order not found", 404);
 
@@ -321,20 +412,43 @@ export async function getPublicOrder(trackingToken) {
   return result;
 }
 
-export async function getPublicOrderSession(tableQrToken, orderingSessionToken) {
-  if (typeof orderingSessionToken !== "string" || !publicTokenPattern.test(orderingSessionToken)) {
+export async function getPublicOrderSession(
+  tableQrToken,
+  orderingSessionToken,
+) {
+  if (
+    typeof orderingSessionToken !== "string" ||
+    !publicTokenPattern.test(orderingSessionToken)
+  ) {
     throw new AppError("Order session not found", 404);
   }
   const table = await prisma.restaurantTable.findFirst({
-    where: { qrToken: tableQrToken, isActive: true, restaurant: { isActive: true } },
-    select: { id: true, tableNumber: true, isOccupied: true, activeOrderingSessionToken: true, restaurant: { select: { name: true, slug: true } } }
+    where: {
+      qrToken: tableQrToken,
+      isActive: true,
+      restaurant: { isActive: true },
+    },
+    select: {
+      id: true,
+      tableNumber: true,
+      isOccupied: true,
+      activeOrderingSessionToken: true,
+      restaurant: { select: { name: true, slug: true } },
+    },
   });
   if (!table) throw new AppError("Order session not found", 404);
-  if (!table.isOccupied || table.activeOrderingSessionToken !== orderingSessionToken) throw new AppError("Order session has expired", 409);
+  if (
+    !table.isOccupied ||
+    table.activeOrderingSessionToken !== orderingSessionToken
+  )
+    throw new AppError("Order session has expired", 409);
   const orders = await prisma.order.findMany({
     where: { restaurantTableId: table.id, orderingSessionToken },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { ...orderSelect, restaurantTable: { select: { tableNumber: true } } }
+    select: {
+      ...orderSelect,
+      restaurantTable: { select: { tableNumber: true } },
+    },
   });
   if (!orders.length) throw new AppError("Order session not found", 404);
   return {
@@ -346,7 +460,7 @@ export async function getPublicOrderSession(tableQrToken, orderingSessionToken) 
       delete result.restaurantTableId;
       delete result.customerContact;
       return result;
-    })
+    }),
   };
 }
 
@@ -354,11 +468,16 @@ async function ownedRestaurant(ownerId, restaurantId) {
   return getRestaurant(ownerId, validateId(restaurantId, "Restaurant"));
 }
 
-async function ownedOrder(ownerId, restaurantId, orderId, select = ownerOrderSelect) {
+async function ownedOrder(
+  ownerId,
+  restaurantId,
+  orderId,
+  select = ownerOrderSelect,
+) {
   await ownedRestaurant(ownerId, restaurantId);
   const order = await prisma.order.findFirst({
     where: { id: validateId(orderId, "Order"), restaurantId },
-    select
+    select,
   });
   if (!order) throw new AppError("Order not found", 404);
   return order;
@@ -368,8 +487,17 @@ export async function listOwnerOrders(ownerId, restaurantId, query) {
   await ownedRestaurant(ownerId, restaurantId);
   const page = Number.parseInt(query.page ?? "1", 10);
   const pageSize = Number.parseInt(query.pageSize ?? "20", 10);
-  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
-    throw new AppError("page must be positive and pageSize must be between 1 and 100", 400);
+  if (
+    !Number.isInteger(page) ||
+    page < 1 ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > 100
+  ) {
+    throw new AppError(
+      "page must be positive and pageSize must be between 1 and 100",
+      400,
+    );
   }
 
   const where = { restaurantId };
@@ -386,13 +514,18 @@ export async function listOwnerOrders(ownerId, restaurantId, query) {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
-      select: ownerOrderSelect
-    })
+      select: ownerOrderSelect,
+    }),
   ]);
 
   return {
     orders: orders.map((order) => presentOrder(order)),
-    pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    },
   };
 }
 
@@ -401,22 +534,32 @@ export async function getOwnerOrder(ownerId, restaurantId, orderId) {
 }
 
 export async function updateOrderStatus(ownerId, restaurantId, orderId, input) {
-  const order = await ownedOrder(ownerId, restaurantId, orderId, { id: true, status: true });
+  const order = await ownedOrder(ownerId, restaurantId, orderId, {
+    id: true,
+    status: true,
+  });
   requireObject(input);
-  if (!orderStatuses.has(input.status)) throw new AppError("Invalid order status", 400);
+  if (!orderStatuses.has(input.status))
+    throw new AppError("Invalid order status", 400);
   if (!transitions[order.status].has(input.status)) {
-    throw new AppError(`Cannot change order status from ${order.status} to ${input.status}`, 409);
+    throw new AppError(
+      `Cannot change order status from ${order.status} to ${input.status}`,
+      409,
+    );
   }
 
   const result = await prisma.order.updateMany({
     where: { id: orderId, restaurantId, status: order.status },
     data: {
       status: input.status,
-      ...(input.status === "COMPLETED" ? { completedAt: new Date() } : {})
-    }
+      ...(input.status === "COMPLETED" ? { completedAt: new Date() } : {}),
+    },
   });
   if (result.count !== 1) {
-    throw new AppError("Order changed before this update could be applied", 409);
+    throw new AppError(
+      "Order changed before this update could be applied",
+      409,
+    );
   }
 
   const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);
@@ -425,32 +568,53 @@ export async function updateOrderStatus(ownerId, restaurantId, orderId, input) {
 }
 
 export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
-  const order = await ownedOrder(ownerId, restaurantId, orderId, { id: true, status: true });
+  const order = await ownedOrder(ownerId, restaurantId, orderId, {
+    id: true,
+    status: true,
+  });
   requireObject(input);
-  if (["REJECTED", "CANCELLED", "COMPLETED"].includes(order.status)) throw new AppError("ETA cannot be changed for this order", 409);
+  if (["REJECTED", "CANCELLED", "COMPLETED"].includes(order.status))
+    throw new AppError("ETA cannot be changed for this order", 409);
   let estimatedReadyAt = null;
   let etaSetAt = null;
   if (Object.prototype.hasOwnProperty.call(input, "estimatedMinutes")) {
-    if (!Number.isInteger(input.estimatedMinutes) || input.estimatedMinutes < 1 || input.estimatedMinutes > 240) {
-      throw new AppError("estimatedMinutes must be an integer between 1 and 240", 400);
+    if (
+      !Number.isInteger(input.estimatedMinutes) ||
+      input.estimatedMinutes < 1 ||
+      input.estimatedMinutes > 240
+    ) {
+      throw new AppError(
+        "estimatedMinutes must be an integer between 1 and 240",
+        400,
+      );
     }
     etaSetAt = new Date();
-    estimatedReadyAt = new Date(etaSetAt.getTime() + input.estimatedMinutes * 60 * 1000);
+    estimatedReadyAt = new Date(
+      etaSetAt.getTime() + input.estimatedMinutes * 60 * 1000,
+    );
   } else if (Object.prototype.hasOwnProperty.call(input, "estimatedReadyAt")) {
-    if (input.estimatedReadyAt !== null && input.estimatedReadyAt !== undefined) {
-      if (typeof input.estimatedReadyAt !== "string") throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
+    if (
+      input.estimatedReadyAt !== null &&
+      input.estimatedReadyAt !== undefined
+    ) {
+      if (typeof input.estimatedReadyAt !== "string")
+        throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
       estimatedReadyAt = new Date(input.estimatedReadyAt);
-      if (Number.isNaN(estimatedReadyAt.getTime())) throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
+      if (Number.isNaN(estimatedReadyAt.getTime()))
+        throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
       etaSetAt = new Date();
     }
   } else throw new AppError("estimatedMinutes is required", 400);
 
   const result = await prisma.order.updateMany({
     where: { id: orderId, restaurantId, status: order.status },
-    data: { estimatedReadyAt, etaSetAt }
+    data: { estimatedReadyAt, etaSetAt },
   });
   if (result.count !== 1) {
-    throw new AppError("Order changed before this update could be applied", 409);
+    throw new AppError(
+      "Order changed before this update could be applied",
+      409,
+    );
   }
 
   const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);
@@ -462,11 +626,14 @@ export async function collectCashPayment(ownerId, restaurantId, orderId) {
   const order = await ownedOrder(ownerId, restaurantId, orderId, {
     id: true,
     paymentMethod: true,
-    paymentStatus: true
+    paymentStatus: true,
   });
 
   if (order.paymentMethod !== "CASH") {
-    throw new AppError("Only cash orders can be collected through this endpoint", 400);
+    throw new AppError(
+      "Only cash orders can be collected through this endpoint",
+      400,
+    );
   }
   if (order.paymentStatus === "PAID") {
     throw new AppError("Order payment has already been collected", 409);
@@ -477,15 +644,18 @@ export async function collectCashPayment(ownerId, restaurantId, orderId) {
       id: orderId,
       restaurantId,
       paymentMethod: "CASH",
-      paymentStatus: "PAYMENT_DUE"
+      paymentStatus: "PAYMENT_DUE",
     },
     data: {
       paymentStatus: "PAID",
-      paymentCollectedAt: new Date()
-    }
+      paymentCollectedAt: new Date(),
+    },
   });
   if (result.count !== 1) {
-    throw new AppError("Order payment changed before collection could be recorded", 409);
+    throw new AppError(
+      "Order payment changed before collection could be recorded",
+      409,
+    );
   }
 
   const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);

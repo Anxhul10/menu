@@ -8,7 +8,7 @@ import {
   tableAvailabilityController,
   resetTableController,
   tableQrController,
-  updateTableController
+  updateTableController,
 } from "../controllers/table.controller.js";
 
 const tableRouter = Router();
@@ -19,7 +19,10 @@ tableRouter.get("/:restaurantId/tables", listTablesController);
 tableRouter.get("/:restaurantId/tables/:tableId", getTableController);
 tableRouter.delete("/:restaurantId/tables/:tableId", deleteTableController);
 tableRouter.patch("/:restaurantId/tables/:tableId", updateTableController);
-tableRouter.patch("/:restaurantId/tables/:tableId/availability", tableAvailabilityController);
+tableRouter.patch(
+  "/:restaurantId/tables/:tableId/availability",
+  tableAvailabilityController,
+);
 tableRouter.patch("/:restaurantId/tables/:tableId/reset", resetTableController);
 tableRouter.get("/:restaurantId/tables/:tableId/qr", tableQrController);
 

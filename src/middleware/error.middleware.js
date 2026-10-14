@@ -3,12 +3,16 @@ export function errorHandler(error, _request, response, _next) {
     console.error("Unhandled API error", {
       name: error.name,
       code: error.code,
-      message: error.message
+      message: error.message,
     });
   }
   const isDuplicateConstraint = error.code === "P2002";
   const isMalformedJson = error.type === "entity.parse.failed";
-  const statusCode = isDuplicateConstraint ? 409 : isMalformedJson ? 400 : error.statusCode ?? 500;
+  const statusCode = isDuplicateConstraint
+    ? 409
+    : isMalformedJson
+      ? 400
+      : (error.statusCode ?? 500);
   const message = isDuplicateConstraint
     ? "Email or restaurant slug already exists"
     : isMalformedJson
@@ -19,7 +23,7 @@ export function errorHandler(error, _request, response, _next) {
 
   response.status(statusCode).json({
     error: {
-      message
-    }
+      message,
+    },
   });
 }

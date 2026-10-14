@@ -1,7 +1,8 @@
 import { prisma } from "../database/prisma.js";
 import { AppError } from "../errors/app-error.js";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const slugCharacterPattern = /[^a-z0-9]+/g;
 const restaurantSelect = {
   id: true,
@@ -12,7 +13,7 @@ const restaurantSelect = {
   isActive: true,
   ownerId: true,
   createdAt: true,
-  updatedAt: true
+  updatedAt: true,
 };
 const permittedUpdateFields = new Set(["name", "description", "address"]);
 
@@ -25,7 +26,11 @@ function requireOwnerId(ownerId) {
 }
 
 function normalizeName(value) {
-  if (typeof value !== "string" || value.trim().length < 2 || value.trim().length > 120) {
+  if (
+    typeof value !== "string" ||
+    value.trim().length < 2 ||
+    value.trim().length > 120
+  ) {
     throw new AppError("name must be between 2 and 120 characters", 400);
   }
 
@@ -38,7 +43,10 @@ function normalizeOptionalText(value, field, maximumLength = 500) {
   }
 
   if (typeof value !== "string" || value.trim().length > maximumLength) {
-    throw new AppError(`${field} must be a string of at most ${maximumLength} characters`, 400);
+    throw new AppError(
+      `${field} must be a string of at most ${maximumLength} characters`,
+      400,
+    );
   }
 
   const normalizedValue = value.trim();
@@ -62,7 +70,12 @@ async function nextAvailableSlug(baseSlug) {
   let candidate = baseSlug;
   let suffix = 1;
 
-  while (await prisma.restaurant.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+  while (
+    await prisma.restaurant.findUnique({
+      where: { slug: candidate },
+      select: { id: true },
+    })
+  ) {
     suffix += 1;
     candidate = `${baseSlug}-${suffix}`;
   }
@@ -83,9 +96,9 @@ async function findOwnedRestaurant(ownerId, restaurantId) {
     where: {
       id: validateRestaurantId(restaurantId),
       ownerId,
-      isActive: true
+      isActive: true,
     },
-    select: restaurantSelect
+    select: restaurantSelect,
   });
 
   if (!restaurant) {
@@ -116,9 +129,9 @@ export async function createRestaurant(ownerId, input) {
           slug,
           description,
           address,
-          ownerId
+          ownerId,
         },
-        select: restaurantSelect
+        select: restaurantSelect,
       });
     } catch (error) {
       if (error.code !== "P2002" || attempt === 4) {
@@ -133,7 +146,7 @@ export async function listRestaurants(ownerId) {
   return prisma.restaurant.findMany({
     where: { ownerId, isActive: true },
     orderBy: { createdAt: "asc" },
-    select: restaurantSelect
+    select: restaurantSelect,
   });
 }
 
@@ -151,7 +164,9 @@ export async function updateRestaurant(ownerId, restaurantId, input) {
   }
 
   const fields = Object.keys(input);
-  const unsupportedField = fields.find((field) => !permittedUpdateFields.has(field));
+  const unsupportedField = fields.find(
+    (field) => !permittedUpdateFields.has(field),
+  );
   if (unsupportedField) {
     throw new AppError(`${unsupportedField} cannot be updated`, 400);
   }
@@ -174,7 +189,7 @@ export async function updateRestaurant(ownerId, restaurantId, input) {
   return prisma.restaurant.update({
     where: { id: restaurantId },
     data,
-    select: restaurantSelect
+    select: restaurantSelect,
   });
 }
 
@@ -185,6 +200,6 @@ export async function archiveRestaurant(ownerId, restaurantId) {
   return prisma.restaurant.update({
     where: { id: restaurantId },
     data: { isActive: false },
-    select: restaurantSelect
+    select: restaurantSelect,
   });
 }
