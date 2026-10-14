@@ -13,7 +13,7 @@ describe("protected routes", () => {
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<div>Owner dashboard</div>} />
             </Route>
-            <Route path="/login" element={<div>Login screen</div>} />
+            <Route path="/admin/login" element={<div>Login screen</div>} />
           </Routes>
         </AuthProvider>
       </MemoryRouter>,

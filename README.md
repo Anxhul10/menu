@@ -42,6 +42,8 @@ The API is available at `http://localhost:3000`. Check it with `curl http://loca
 
 The Vite frontend uses `VITE_API_BASE_URL=http://localhost:3000/api`. Socket.IO may be configured with `VITE_SOCKET_URL=http://localhost:3000`; otherwise it is derived from the API URL. Start it separately with `cd frontend && npm run dev`. The backend allowlist in `CORS_ORIGINS` must include the browser origin serving the frontend.
 
+The customer homepage is `/`: customers can scan a Menu QR code or enter its secure public table token without signing in. Owner access is separated under `/admin`, `/admin/login`, `/admin/signup`, and `/admin/dashboard`; the older `/app` dashboard URLs remain supported.
+
 ## Authentication API
 
 Registration creates a user and their first restaurant. Email addresses are normalized to lowercase, passwords are bcrypt-hashed, and the response contains a signed access token.

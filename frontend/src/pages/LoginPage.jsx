@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const next = new URLSearchParams(location.search).get("next") || "/app";
+  const next = new URLSearchParams(location.search).get("next") || "/admin/dashboard";
   async function submit(event) { event.preventDefault(); setError(""); setBusy(true); try { await login(form); navigate(next); } catch (err) { setError(err.message); } finally { setBusy(false); } }
   return <AuthShell title="Welcome back" subtitle="Sign in to keep your service moving.">
     <form onSubmit={submit} className="stack-form">
@@ -18,7 +18,7 @@ export default function LoginPage() {
       <label className="field"><span>Password</span><input type="password" autoComplete="current-password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
       <button className="button primary full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
     </form>
-    <p className="auth-switch">New to Menu? <Link to="/register">Create an account</Link></p>
+    <p className="auth-switch">New to Menu? <Link to="/admin/signup">Create an owner account</Link></p>
   </AuthShell>;
 }
 

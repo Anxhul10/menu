@@ -18,6 +18,6 @@ export default function RegisterPage() {
       <label className="field"><span>Public slug</span><input required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="your-restaurant" value={form.restaurantSlug} onChange={(e) => setForm({ ...form, restaurantSlug: e.target.value.toLowerCase() })} /></label>
       <button className="button primary full" disabled={busy}>{busy ? "Creating workspace…" : "Create workspace"}</button>
     </form>
-    <p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p>
+    <p className="auth-switch">Already have an account? <Link to="/admin/login">Sign in</Link></p>
   </AuthShell>;
 }

@@ -23,6 +23,7 @@ npm test
 
 ## Routes
 
+- `/` is the customer-first entry page. `/admin` is the separate owner entry page, with `/admin/login`, `/admin/signup`, and protected `/admin/dashboard` routes.
 - `/login` and `/register` use `POST /api/auth/login` and `POST /api/auth/register`.
 - `/app` loads `GET /api/auth/me` and `GET /api/restaurants`.
 - Restaurant dashboard pages use the authenticated restaurant, menu, table, and order management endpoints under `/api/restaurants/:restaurantId`.
@@ -32,6 +33,8 @@ npm test
 - `/order/:trackingToken` polls `GET /api/public/orders/:trackingToken`.
 
 The QR image and public URL are returned by the backend table QR endpoint; the frontend does not construct privileged URLs or expose internal IDs as authorization credentials.
+
+The manual table code is the QR token itself: a secure 32–100 character URL-safe token. Scanned URLs must match the expected `/r/:restaurantSlug/t/:qrToken` pattern and an allowed public origin. Camera permission is requested only after selecting **Scan QR Code**; denied or unsupported cameras fall back to manual code entry.
 
 ## Local integration
 

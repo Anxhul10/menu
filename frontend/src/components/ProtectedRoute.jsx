@@ -5,5 +5,5 @@ export default function ProtectedRoute() {
   const { session, loading } = useAuth();
   const location = useLocation();
   if (loading) return <div className="screen-center"><div className="loader" />Loading your workspace…</div>;
-  return session ? <Outlet /> : <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  return session ? <Outlet /> : <Navigate to={`/admin/login?next=${encodeURIComponent(location.pathname)}`} replace />;
 }

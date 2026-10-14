@@ -13,17 +13,32 @@ import PublicMenuPage from "./pages/public/PublicMenuPage";
 import TableMenuPage from "./pages/public/TableMenuPage";
 import CartPage from "./pages/public/CartPage";
 import OrderTrackingPage from "./pages/public/OrderTrackingPage";
+import HomePage from "./pages/HomePage";
+import AdminEntryPage from "./pages/AdminEntryPage";
+import NotFoundPage from "./pages/NotFoundPage";
 
 export default function App() {
   return <BrowserRouter><AuthProvider><CartProvider><Routes>
-    <Route path="/login" element={<LoginPage />} />
-    <Route path="/register" element={<RegisterPage />} />
-    <Route element={<ProtectedRoute />}><Route element={<OwnerLayout />}><Route path="/app" element={<DashboardPage />} /><Route path="/app/restaurants/:restaurantId/menu" element={<MenuPage />} /><Route path="/app/restaurants/:restaurantId/tables" element={<TablesPage />} /><Route path="/app/restaurants/:restaurantId/orders" element={<OrdersPage />} /></Route></Route>
+    <Route path="/" element={<HomePage />} />
+    <Route path="/admin" element={<AdminEntryPage />} />
+    <Route path="/admin/login" element={<LoginPage />} />
+    <Route path="/admin/signup" element={<RegisterPage />} />
+    <Route path="/login" element={<Navigate to="/admin/login" replace />} />
+    <Route path="/register" element={<Navigate to="/admin/signup" replace />} />
+    <Route element={<ProtectedRoute />}><Route element={<OwnerLayout />}>
+      <Route path="/admin/dashboard" element={<DashboardPage />} />
+      <Route path="/admin/restaurants/:restaurantId/menu" element={<MenuPage />} />
+      <Route path="/admin/restaurants/:restaurantId/tables" element={<TablesPage />} />
+      <Route path="/admin/restaurants/:restaurantId/orders" element={<OrdersPage />} />
+      <Route path="/app" element={<DashboardPage />} />
+      <Route path="/app/restaurants/:restaurantId/menu" element={<MenuPage />} />
+      <Route path="/app/restaurants/:restaurantId/tables" element={<TablesPage />} />
+      <Route path="/app/restaurants/:restaurantId/orders" element={<OrdersPage />} />
+    </Route></Route>
     <Route path="/r/:slug/menu" element={<PublicMenuPage />} />
     <Route path="/r/:slug/t/:qrToken" element={<TableMenuPage />} />
     <Route path="/cart" element={<CartPage />} />
     <Route path="/order/:trackingToken" element={<OrderTrackingPage />} />
-    <Route path="/" element={<Navigate to="/login" replace />} />
-    <Route path="*" element={<Navigate to="/" replace />} />
+    <Route path="*" element={<NotFoundPage />} />
   </Routes></CartProvider></AuthProvider></BrowserRouter>;
 }
