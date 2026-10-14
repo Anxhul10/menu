@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const database = vi.hoisted(() => ({
   prisma: {
     restaurant: { findFirst: vi.fn() },
-    restaurantTable: { findFirst: vi.fn() },
     menuItem: { findMany: vi.fn() },
     order: {
       create: vi.fn(),
@@ -17,6 +16,7 @@ const database = vi.hoisted(() => ({
       updateMany: vi.fn()
     },
     orderItem: { create: vi.fn() },
+    restaurantTable: { findFirst: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn()
   }
 }));
@@ -35,6 +35,7 @@ const secondItemId = "77777777-7777-4777-8777-777777777777";
 const orderId = "88888888-8888-4888-8888-888888888888";
 const tableQrToken = "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFG";
 const trackingToken = "ZYXWVUTSRQPONMLKJIHGFEDCBA0987654321";
+const orderingSessionToken = "SESSIONabcdefghijklmnopqrstuv1234567890";
 
 function ownerToken(userId = ownerId) {
   return jwt.sign(
@@ -65,9 +66,11 @@ function order(overrides = {}) {
     paymentStatus: "PAYMENT_DUE",
     totalAmount: "12.50",
     trackingToken,
+    orderingSessionToken,
     customerName: "Sam",
     customerContact: null,
     estimatedReadyAt: null,
+    etaSetAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     items: [],
@@ -93,6 +96,7 @@ beforeEach(() => {
   database.prisma.order.count.mockResolvedValue(1);
   database.prisma.order.update.mockResolvedValue(order({ status: "ACCEPTED" }));
   database.prisma.order.updateMany.mockResolvedValue({ count: 1 });
+  database.prisma.restaurantTable.updateMany.mockResolvedValue({ count: 1 });
 });
 
 const validOrder = () => ({
@@ -111,7 +115,11 @@ describe("POST /api/public/orders", () => {
     expect(response.body.order.paymentMethod).toBe("CASH");
     expect(response.body.order.paymentStatus).toBe("PAYMENT_DUE");
     expect(response.body.order.trackingToken).toBe(trackingToken);
+    expect(response.body.order.orderingSessionToken).toBe(orderingSessionToken);
     expect(database.prisma.$transaction).toHaveBeenCalled();
+    expect(database.prisma.restaurantTable.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { isOccupied: true, activeOrderingSessionToken: expect.any(String) }
+    }));
     expect(database.prisma.order.create.mock.calls[0][0].data).not.toHaveProperty("total");
   });
 
@@ -179,11 +187,32 @@ describe("POST /api/public/orders", () => {
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: { message: "Internal server error" } });
     expect(database.prisma.$transaction).toHaveBeenCalled();
+    expect(database.prisma.restaurantTable.updateMany).not.toHaveBeenCalled();
     expect(eventSpy).not.toHaveBeenCalledWith("order:created", expect.anything());
   });
 });
 
 describe("public order tracking", () => {
+  it("returns all batches for an authorized table ordering session", async () => {
+    database.prisma.restaurantTable.findFirst.mockResolvedValue({ id: tableId, tableNumber: "12", isOccupied: true, activeOrderingSessionToken: orderingSessionToken, restaurant: { name: "Cafe", slug: "cafe" } });
+    database.prisma.order.findMany.mockResolvedValue([order(), order({ id: "99999999-9999-4999-8999-999999999999", trackingToken: "ANOTHERabcdefghijklmnopqrstuvwxyz123456" })]);
+
+    const response = await request(app)
+      .get(`/api/public/orders/session/${orderingSessionToken}?tableQrToken=${tableQrToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.orders).toHaveLength(2);
+    expect(response.body.orders[0]).not.toHaveProperty("trackingToken");
+    expect(response.body.tableNumber).toBe("12");
+  });
+
+  it("does not allow an unknown session token to retrieve batches", async () => {
+    database.prisma.order.findMany.mockResolvedValue([]);
+    database.prisma.restaurantTable.findFirst.mockResolvedValue({ id: tableId, tableNumber: "12", isOccupied: true, activeOrderingSessionToken: orderingSessionToken, restaurant: { name: "Cafe", slug: "cafe" } });
+    const response = await request(app).get(`/api/public/orders/session/${orderingSessionToken}?tableQrToken=${tableQrToken}`);
+    expect(response.status).toBe(404);
+  });
+
   it("uses the tracking token instead of treating an order ID as authorization", async () => {
     const response = await request(app).get(`/api/public/orders/${trackingToken}`);
 

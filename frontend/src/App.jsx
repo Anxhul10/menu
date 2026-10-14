@@ -13,6 +13,7 @@ import PublicMenuPage from "./pages/public/PublicMenuPage";
 import TableMenuPage from "./pages/public/TableMenuPage";
 import CartPage from "./pages/public/CartPage";
 import OrderTrackingPage from "./pages/public/OrderTrackingPage";
+import OrderSummaryPage from "./pages/public/OrderSummaryPage";
 import HomePage from "./pages/HomePage";
 import AdminEntryPage from "./pages/AdminEntryPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -39,6 +40,7 @@ export default function App() {
     <Route path="/r/:slug/t/:qrToken" element={<TableMenuPage />} />
     <Route path="/cart" element={<CartPage />} />
     <Route path="/order/:trackingToken" element={<OrderTrackingPage />} />
+    <Route path="/orders" element={<OrderSummaryPage />} />
     <Route path="*" element={<NotFoundPage />} />
   </Routes></CartProvider></AuthProvider></BrowserRouter>;
 }

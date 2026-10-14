@@ -12,6 +12,8 @@ const tableFields = {
   tableNumber: true,
   qrToken: true,
   isActive: true,
+  isOccupied: true,
+  activeOrderingSessionToken: true,
   createdAt: true,
   updatedAt: true
 };
@@ -63,6 +65,7 @@ function presentTable(table) {
     tableNumber: table.tableNumber,
     qrToken: table.qrToken,
     isActive: table.isActive,
+    isOccupied: table.isOccupied,
     createdAt: table.createdAt,
     updatedAt: table.updatedAt
   };
@@ -171,6 +174,46 @@ export async function setTableAvailability(ownerId, restaurantId, tableId, input
     select: tableFields
   });
   return presentTable(table);
+}
+
+export async function resetTable(ownerId, restaurantId, tableId) {
+  await ownedRestaurant(ownerId, restaurantId);
+  const table = await prisma.restaurantTable.findFirst({
+    where: { id: validateId(tableId, "Table"), restaurantId },
+    select: { id: true, isOccupied: true }
+  });
+  if (!table) throw new AppError("Table not found", 404);
+  if (!table.isOccupied) throw new AppError("Table is already unoccupied", 409);
+
+  const reset = await prisma.$transaction(async (transaction) => {
+    const orders = await transaction.order.findMany({
+      where: { restaurantTableId: tableId },
+      select: { status: true, paymentStatus: true }
+    });
+    const activeOrder = orders.find((order) => !["COMPLETED", "REJECTED", "CANCELLED"].includes(order.status));
+    if (activeOrder) throw new AppError("Table cannot be reset while orders are still active", 409);
+    if (orders.some((order) => order.paymentStatus === "PAYMENT_DUE")) {
+      throw new AppError("Table cannot be reset while an order payment is due", 409);
+    }
+    const result = await transaction.restaurantTable.updateMany({
+      where: { id: tableId, restaurantId, isOccupied: true },
+      data: { isOccupied: false, activeOrderingSessionToken: null }
+    });
+    if (result.count !== 1) throw new AppError("Table changed before reset could be applied", 409);
+    return result;
+  });
+  if (!reset) throw new AppError("Table reset failed", 409);
+  return getTable(ownerId, restaurantId, tableId);
+}
+
+export async function deleteTable(ownerId, restaurantId, tableId) {
+  await ownedTable(ownerId, restaurantId, tableId);
+  const orderCount = await prisma.order.count({ where: { restaurantTableId: tableId } });
+  if (orderCount > 0) {
+    throw new AppError("Tables with order history cannot be deleted; deactivate the table instead", 409);
+  }
+
+  await prisma.restaurantTable.delete({ where: { id: tableId } });
 }
 
 export async function generateTableQr(ownerId, restaurantId, tableId) {

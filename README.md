@@ -226,6 +226,7 @@ Table management requires `Authorization: Bearer <token>` and verifies ownership
 - `PATCH /api/restaurants/:restaurantId/tables/:tableId` updates only `tableNumber`.
 - `PATCH /api/restaurants/:restaurantId/tables/:tableId/availability` accepts `{ "isActive": false }` or `{ "isActive": true }`. Inactive tables remain stored for future historical order relationships.
 - `GET /api/restaurants/:restaurantId/tables/:tableId/qr` returns a printable PNG data URL and its customer-facing URL.
+- `DELETE /api/restaurants/:restaurantId/tables/:tableId` deletes an owned table only when it has no order history. Tables with orders return `409` and must be deactivated instead, preserving historical relationships.
 
 The QR URL uses the configured `PUBLIC_APP_URL` and has this shape:
 
@@ -303,7 +304,7 @@ Owner order endpoints require `Authorization: Bearer <token>` and verify restaur
 - `GET /api/restaurants/:restaurantId/orders?page=1&pageSize=20&status=PENDING` lists orders newest first with pagination and an optional status filter. `pageSize` is limited to 100.
 - `GET /api/restaurants/:restaurantId/orders/:orderId` retrieves one order.
 - `PATCH /api/restaurants/:restaurantId/orders/:orderId/status` changes status through the server state machine.
-- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` accepts `{ "estimatedReadyAt": "2026-01-01T12:00:00.000Z" }` or `{ "estimatedReadyAt": null }`.
+- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` accepts `{ "estimatedMinutes": 20 }`; the server stores the deadline and `etaSetAt`. Minutes must be between 1 and 240.
 - `PATCH /api/restaurants/:restaurantId/orders/:orderId/payment` records cash collection; it takes no client-supplied amount and cannot alter the order total.
 
 Allowed status transitions are:
@@ -320,6 +321,19 @@ READY → COMPLETED
 Order creation runs in a serializable Prisma transaction and retries serialization conflicts. Menu availability and prices are re-read inside that transaction; an unavailable or foreign item rejects the complete order, and item/order creation cannot partially commit. Status and payment writes use conditional `updateMany` predicates containing the previously observed status/payment state, so a concurrent dashboard request affects zero rows and returns `409` instead of silently overwriting the other update. This is optimistic compare-and-set protection; clients should refresh after a conflict.
 
 The authentication, restaurant, menu, table, and order tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
+
+Guest order batches use a server-generated `orderingSessionToken`. The token is returned only when a batch is created and is kept in browser `sessionStorage`, scoped to the table QR token; it is not placed in public URLs. `GET /api/public/orders/session/:orderingSessionToken?tableQrToken=...` returns all batches for that table/session. Each submitted cart remains a separate order batch. The customer summary subscribes to an authorized session room and falls back to HTTP refresh after reconnecting.
+
+ETA countdowns use the persisted `estimatedReadyAt` deadline, so adding another batch never resets an existing countdown. Revisions replace the deadline from the moment the server accepts the new minute value; countdown expiry never changes order status automatically.
+
+Tables now expose persisted `isOccupied` state. A successful first order atomically marks the table occupied and assigns its active ordering-session token. Additional batches must use that active token. `PATCH /api/restaurants/:restaurantId/tables/:tableId/reset` requires ownership and resets only when all table orders are terminal (`COMPLETED`, `REJECTED`, or `CANCELLED`) and no payment remains due. Reset preserves all order history and invalidates the previous session; the next order starts a new session. Scanning a QR code alone never occupies a table.
+
+After pulling these schema changes into an environment, run:
+
+```sh
+npx prisma migrate deploy
+npx prisma generate
+```
 
 ```sh
 npm test

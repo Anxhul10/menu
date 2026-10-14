@@ -80,6 +80,8 @@ model RestaurantTable {
   tableNumber String
   qrToken     String     @unique
   isActive    Boolean    @default(true)
+  isOccupied  Boolean    @default(false)
+  activeOrderingSessionToken String?
   restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   orders      Order[]
   createdAt   DateTime   @default(now())
@@ -87,6 +89,7 @@ model RestaurantTable {
 
   @@unique([restaurantId, tableNumber])
   @@index([restaurantId, isActive])
+  @@index([restaurantId, isOccupied])
 }
 
 enum OrderStatus {
@@ -118,9 +121,11 @@ model Order {
   paymentCollectedAt DateTime?
   totalAmount       Decimal       @db.Decimal(10, 2)
   trackingToken     String        @unique
+  orderingSessionToken String?
   customerName      String?
   customerContact   String?
   estimatedReadyAt  DateTime?
+  etaSetAt          DateTime?
   completedAt       DateTime?
   restaurant        Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   restaurantTable   RestaurantTable @relation(fields: [restaurantTableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -130,6 +135,7 @@ model Order {
 
   @@index([restaurantId, createdAt])
   @@index([restaurantTableId, createdAt])
+  @@index([restaurantTableId, orderingSessionToken, createdAt])
   @@index([restaurantId, status, createdAt])
 }
 

@@ -1,9 +1,11 @@
 import {
   createTable,
+  deleteTable,
   generateTableQr,
   getTable,
   listTables,
   setTableAvailability,
+  resetTable,
   updateTable
 } from "../services/table.service.js";
 
@@ -38,6 +40,16 @@ export const updateTableController = handle(async (request) => ({
 export const tableAvailabilityController = handle(async (request) => ({
   table: await setTableAvailability(request.auth.userId, request.params.restaurantId, request.params.tableId, request.body)
 }));
+
+export const resetTableController = handle(async (request) => ({
+  table: await resetTable(request.auth.userId, request.params.restaurantId, request.params.tableId)
+}));
+
+export const deleteTableController = handle((request) => deleteTable(
+  request.auth.userId,
+  request.params.restaurantId,
+  request.params.tableId
+), 204);
 
 export const tableQrController = handle(async (request) => generateTableQr(
   request.auth.userId,

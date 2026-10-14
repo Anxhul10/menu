@@ -7,10 +7,14 @@ const database = vi.hoisted(() => ({
     restaurant: { findFirst: vi.fn() },
     restaurantTable: {
       create: vi.fn(),
+      delete: vi.fn(),
       findMany: vi.fn(),
       findFirst: vi.fn(),
-      update: vi.fn()
-    }
+      update: vi.fn(),
+      updateMany: vi.fn()
+    },
+    order: { count: vi.fn(), findMany: vi.fn() },
+    $transaction: vi.fn()
   }
 }));
 
@@ -40,6 +44,8 @@ function table(overrides = {}) {
     tableNumber: "12",
     qrToken,
     isActive: true,
+    isOccupied: false,
+    activeOrderingSessionToken: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides
@@ -58,6 +64,11 @@ beforeEach(() => {
   database.prisma.restaurantTable.findMany.mockResolvedValue([table()]);
   database.prisma.restaurantTable.findFirst.mockResolvedValue(table());
   database.prisma.restaurantTable.update.mockImplementation(async ({ data }) => table(data));
+  database.prisma.restaurantTable.delete.mockResolvedValue(undefined);
+  database.prisma.order.count.mockResolvedValue(0);
+  database.prisma.order.findMany.mockResolvedValue([]);
+  database.prisma.restaurantTable.updateMany.mockResolvedValue({ count: 1 });
+  database.prisma.$transaction.mockImplementation((callback) => callback(database.prisma));
 });
 
 describe("table management", () => {
@@ -135,6 +146,58 @@ describe("table management", () => {
       data: { isActive: false }
     }));
   });
+
+  it("deletes an owned table when it has no order history", async () => {
+    const response = await request(app)
+      .delete(`/api/restaurants/${restaurantId}/tables/${tableId}`)
+      .set("Authorization", `Bearer ${tokenFor()}`);
+
+    expect(response.status).toBe(204);
+    expect(database.prisma.order.count).toHaveBeenCalledWith({ where: { restaurantTableId: tableId } });
+    expect(database.prisma.restaurantTable.delete).toHaveBeenCalledWith({ where: { id: tableId } });
+  });
+
+  it("preserves tables with order history by requiring deactivation", async () => {
+    database.prisma.order.count.mockResolvedValue(1);
+
+    const response = await request(app)
+      .delete(`/api/restaurants/${restaurantId}/tables/${tableId}`)
+      .set("Authorization", `Bearer ${tokenFor()}`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.message).toContain("order history");
+    expect(database.prisma.restaurantTable.delete).not.toHaveBeenCalled();
+  });
+
+  it("resets an occupied table only after all orders are terminal and paid", async () => {
+    database.prisma.restaurantTable.findFirst
+      .mockResolvedValueOnce(table({ isOccupied: true, activeOrderingSessionToken: "session" }))
+      .mockResolvedValueOnce(table({ isOccupied: false, activeOrderingSessionToken: null }));
+    database.prisma.order.findMany.mockResolvedValue([{ status: "COMPLETED", paymentStatus: "PAID" }]);
+
+    const response = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/tables/${tableId}/reset`)
+      .set("Authorization", `Bearer ${tokenFor()}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.table.isOccupied).toBe(false);
+    expect(database.prisma.restaurantTable.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: tableId, restaurantId, isOccupied: true },
+      data: { isOccupied: false, activeOrderingSessionToken: null }
+    }));
+  });
+
+  it("rejects resetting a table with active or unpaid orders", async () => {
+    database.prisma.restaurantTable.findFirst.mockResolvedValue(table({ isOccupied: true }));
+    database.prisma.order.findMany.mockResolvedValue([{ status: "PREPARING", paymentStatus: "PAYMENT_DUE" }]);
+
+    const response = await request(app)
+      .patch(`/api/restaurants/${restaurantId}/tables/${tableId}/reset`)
+      .set("Authorization", `Bearer ${tokenFor()}`);
+
+    expect(response.status).toBe(409);
+    expect(database.prisma.restaurantTable.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("table authorization and QR codes", () => {
@@ -159,6 +222,18 @@ describe("table authorization and QR codes", () => {
     expect(getResponse.status).toBe(404);
     expect(updateResponse.status).toBe(404);
     expect(database.prisma.restaurantTable.update).not.toHaveBeenCalled();
+  });
+
+  it("prevents another owner from deleting a table", async () => {
+    database.prisma.restaurant.findFirst.mockResolvedValue(null);
+
+    const response = await request(app)
+      .delete(`/api/restaurants/${restaurantId}/tables/${tableId}`)
+      .set("Authorization", `Bearer ${tokenFor(otherOwnerId)}`);
+
+    expect(response.status).toBe(404);
+    expect(database.prisma.order.count).not.toHaveBeenCalled();
+    expect(database.prisma.restaurantTable.delete).not.toHaveBeenCalled();
   });
 
   it("generates a QR data URL with the configured customer URL", async () => {

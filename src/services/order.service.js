@@ -6,6 +6,7 @@ import { getRestaurant } from "./restaurant.service.js";
 import { ORDER_CREATED, ORDER_ETA_UPDATED, ORDER_UPDATED, publishOrderEvent } from "../realtime/order-events.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const publicTokenPattern = /^[A-Za-z0-9_-]{32,100}$/;
 const orderStatuses = new Set(["PENDING", "ACCEPTED", "REJECTED", "PREPARING", "READY", "COMPLETED", "CANCELLED"]);
 const transitions = {
   PENDING: new Set(["ACCEPTED", "REJECTED", "CANCELLED"]),
@@ -41,9 +42,11 @@ const orderSelect = {
   paymentCollectedAt: true,
   totalAmount: true,
   trackingToken: true,
+  orderingSessionToken: true,
   customerName: true,
   customerContact: true,
   estimatedReadyAt: true,
+  etaSetAt: true,
   completedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -115,7 +118,7 @@ function moneyString(value) {
   return money(value).toFixed(2);
 }
 
-function presentOrder(order, { includeTrackingToken = false } = {}) {
+function presentOrder(order, { includeTrackingToken = false, includeOrderingSessionToken = false } = {}) {
   const result = {
     orderId: order.id,
     restaurantId: order.restaurantId,
@@ -128,6 +131,7 @@ function presentOrder(order, { includeTrackingToken = false } = {}) {
     customerName: order.customerName,
     customerContact: order.customerContact,
     estimatedReadyAt: order.estimatedReadyAt,
+    etaSetAt: order.etaSetAt,
     completedAt: order.completedAt,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
@@ -142,6 +146,7 @@ function presentOrder(order, { includeTrackingToken = false } = {}) {
   };
 
   if (includeTrackingToken) result.trackingToken = order.trackingToken;
+  if (includeOrderingSessionToken) result.orderingSessionToken = order.orderingSessionToken;
   if (order.restaurantTable?.tableNumber) result.tableNumber = order.restaurantTable.tableNumber;
   return result;
 }
@@ -159,6 +164,7 @@ async function publishPersistedOrder(orderId, eventName) {
     publishOrderEvent(eventName, {
       restaurantId: order.restaurantId,
       trackingToken: order.trackingToken,
+      orderingSessionToken: order.orderingSessionToken,
       ownerOrder,
       publicOrder
     });
@@ -180,7 +186,9 @@ async function activeTableByToken(transaction, tableQrToken) {
     },
     select: {
       id: true,
-      restaurantId: true
+      restaurantId: true,
+      isOccupied: true,
+      activeOrderingSessionToken: true
     }
   });
 
@@ -193,6 +201,14 @@ async function activeTableByToken(transaction, tableQrToken) {
 
 async function createOrderTransaction(transaction, input) {
   const table = await activeTableByToken(transaction, input.tableQrToken);
+  const orderingSessionToken = input.orderingSessionToken ?? randomBytes(32).toString("base64url");
+  if (input.orderingSessionToken) {
+    if (!table.isOccupied || table.activeOrderingSessionToken !== input.orderingSessionToken) {
+      throw new AppError("Ordering session has expired; scan the table again", 409);
+    }
+  } else if (table.isOccupied) {
+    throw new AppError("This table already has an active dining session", 409);
+  }
   const menuItems = await transaction.menuItem.findMany({
     where: {
       id: { in: input.order.items.map((entry) => entry.menuItemId) },
@@ -231,6 +247,7 @@ async function createOrderTransaction(transaction, input) {
       paymentStatus: "PAYMENT_DUE",
       totalAmount,
       trackingToken: randomBytes(32).toString("base64url"),
+      orderingSessionToken,
       customerName: input.order.customerName,
       customerContact: input.order.customerContact
     },
@@ -245,6 +262,14 @@ async function createOrderTransaction(transaction, input) {
     }));
   }
 
+  const occupancy = await transaction.restaurantTable.updateMany({
+    where: input.orderingSessionToken
+      ? { id: table.id, isActive: true, isOccupied: true, activeOrderingSessionToken: orderingSessionToken }
+      : { id: table.id, isActive: true, isOccupied: false, activeOrderingSessionToken: null },
+    data: { isOccupied: true, activeOrderingSessionToken: orderingSessionToken }
+  });
+  if (occupancy.count !== 1) throw new AppError("Table changed before the order could be created", 409);
+
   return { ...order, items };
 }
 
@@ -253,15 +278,19 @@ export async function createPublicOrder(input) {
   if (typeof input.tableQrToken !== "string") {
     throw new AppError("tableQrToken is required", 400);
   }
+  const orderingSessionToken = input.orderingSessionToken;
+  if (orderingSessionToken !== undefined && (typeof orderingSessionToken !== "string" || !publicTokenPattern.test(orderingSessionToken))) {
+    throw new AppError("Invalid ordering session", 400);
+  }
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const order = await prisma.$transaction(
-        (transaction) => createOrderTransaction(transaction, { tableQrToken: input.tableQrToken, order: orderInput }),
+        (transaction) => createOrderTransaction(transaction, { tableQrToken: input.tableQrToken, orderingSessionToken, order: orderInput }),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
       );
       await publishPersistedOrder(order.id, ORDER_CREATED);
-      return presentOrder(order, { includeTrackingToken: true });
+      return presentOrder(order, { includeTrackingToken: true, includeOrderingSessionToken: true });
     } catch (error) {
       if (error.code !== "P2034" || attempt === 2) throw error;
     }
@@ -290,6 +319,35 @@ export async function getPublicOrder(trackingToken) {
   delete result.restaurantTableId;
   delete result.customerContact;
   return result;
+}
+
+export async function getPublicOrderSession(tableQrToken, orderingSessionToken) {
+  if (typeof orderingSessionToken !== "string" || !publicTokenPattern.test(orderingSessionToken)) {
+    throw new AppError("Order session not found", 404);
+  }
+  const table = await prisma.restaurantTable.findFirst({
+    where: { qrToken: tableQrToken, isActive: true, restaurant: { isActive: true } },
+    select: { id: true, tableNumber: true, isOccupied: true, activeOrderingSessionToken: true, restaurant: { select: { name: true, slug: true } } }
+  });
+  if (!table) throw new AppError("Order session not found", 404);
+  if (!table.isOccupied || table.activeOrderingSessionToken !== orderingSessionToken) throw new AppError("Order session has expired", 409);
+  const orders = await prisma.order.findMany({
+    where: { restaurantTableId: table.id, orderingSessionToken },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { ...orderSelect, restaurantTable: { select: { tableNumber: true } } }
+  });
+  if (!orders.length) throw new AppError("Order session not found", 404);
+  return {
+    restaurant: table.restaurant,
+    tableNumber: table.tableNumber,
+    orders: orders.map((order) => {
+      const result = presentOrder(order);
+      delete result.restaurantId;
+      delete result.restaurantTableId;
+      delete result.customerContact;
+      return result;
+    })
+  };
 }
 
 async function ownedRestaurant(ownerId, restaurantId) {
@@ -367,21 +425,29 @@ export async function updateOrderStatus(ownerId, restaurantId, orderId, input) {
 }
 
 export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
-  await ownedOrder(ownerId, restaurantId, orderId, { id: true });
+  const order = await ownedOrder(ownerId, restaurantId, orderId, { id: true, status: true });
   requireObject(input);
-  if (!Object.prototype.hasOwnProperty.call(input, "estimatedReadyAt")) {
-    throw new AppError("estimatedReadyAt is required", 400);
-  }
+  if (["REJECTED", "CANCELLED", "COMPLETED"].includes(order.status)) throw new AppError("ETA cannot be changed for this order", 409);
   let estimatedReadyAt = null;
-  if (input.estimatedReadyAt !== null && input.estimatedReadyAt !== undefined) {
-    if (typeof input.estimatedReadyAt !== "string") throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
-    estimatedReadyAt = new Date(input.estimatedReadyAt);
-    if (Number.isNaN(estimatedReadyAt.getTime())) throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
-  }
+  let etaSetAt = null;
+  if (Object.prototype.hasOwnProperty.call(input, "estimatedMinutes")) {
+    if (!Number.isInteger(input.estimatedMinutes) || input.estimatedMinutes < 1 || input.estimatedMinutes > 240) {
+      throw new AppError("estimatedMinutes must be an integer between 1 and 240", 400);
+    }
+    etaSetAt = new Date();
+    estimatedReadyAt = new Date(etaSetAt.getTime() + input.estimatedMinutes * 60 * 1000);
+  } else if (Object.prototype.hasOwnProperty.call(input, "estimatedReadyAt")) {
+    if (input.estimatedReadyAt !== null && input.estimatedReadyAt !== undefined) {
+      if (typeof input.estimatedReadyAt !== "string") throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
+      estimatedReadyAt = new Date(input.estimatedReadyAt);
+      if (Number.isNaN(estimatedReadyAt.getTime())) throw new AppError("estimatedReadyAt must be an ISO date or null", 400);
+      etaSetAt = new Date();
+    }
+  } else throw new AppError("estimatedMinutes is required", 400);
 
   const result = await prisma.order.updateMany({
-    where: { id: orderId, restaurantId },
-    data: { estimatedReadyAt }
+    where: { id: orderId, restaurantId, status: order.status },
+    data: { estimatedReadyAt, etaSetAt }
   });
   if (result.count !== 1) {
     throw new AppError("Order changed before this update could be applied", 409);

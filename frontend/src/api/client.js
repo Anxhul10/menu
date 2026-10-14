@@ -74,14 +74,17 @@ export const api = {
   availability: (restaurantId, itemId, isAvailable) => json("PATCH", `/restaurants/${restaurantId}/items/${itemId}/availability`, { isAvailable }),
   tables: (restaurantId) => request(`/restaurants/${restaurantId}/tables`),
   createTable: (restaurantId, body) => json("POST", `/restaurants/${restaurantId}/tables`, body),
+  deleteTable: (restaurantId, tableId) => request(`/restaurants/${restaurantId}/tables/${tableId}`, { method: "DELETE" }),
   updateTableAvailability: (restaurantId, tableId, isActive) => json("PATCH", `/restaurants/${restaurantId}/tables/${tableId}/availability`, { isActive }),
+  resetTable: (restaurantId, tableId) => request(`/restaurants/${restaurantId}/tables/${tableId}/reset`, { method: "PATCH" }),
   tableQr: (restaurantId, tableId) => request(`/restaurants/${restaurantId}/tables/${tableId}/qr`),
   orders: (restaurantId, params = {}) => request(`/restaurants/${restaurantId}/orders?${new URLSearchParams(params)}`),
   updateOrderStatus: (restaurantId, orderId, status) => json("PATCH", `/restaurants/${restaurantId}/orders/${orderId}/status`, { status }),
-  updateOrderEta: (restaurantId, orderId, estimatedReadyAt) => json("PATCH", `/restaurants/${restaurantId}/orders/${orderId}/eta`, { estimatedReadyAt }),
+  updateOrderEta: (restaurantId, orderId, estimatedMinutes) => json("PATCH", `/restaurants/${restaurantId}/orders/${orderId}/eta`, { estimatedMinutes }),
   collectPayment: (restaurantId, orderId) => request(`/restaurants/${restaurantId}/orders/${orderId}/payment`, { method: "PATCH" }),
   publicTable: (token) => request(`/public/tables/${encodeURIComponent(token)}`),
   publicMenu: (slug) => request(`/public/restaurants/${encodeURIComponent(slug)}/menu`),
   placeOrder: (body) => json("POST", "/public/orders", body),
+  publicOrderSession: (tableQrToken, orderingSessionToken) => request(`/public/orders/session/${encodeURIComponent(orderingSessionToken)}?tableQrToken=${encodeURIComponent(tableQrToken)}`),
   trackOrder: (trackingToken) => request(`/public/orders/${encodeURIComponent(trackingToken)}`)
 };

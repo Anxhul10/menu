@@ -2,7 +2,7 @@ import { Server } from "socket.io";
 import { env } from "../config/env.js";
 import { verifyAccessToken } from "../services/auth.service.js";
 import { getRestaurant } from "../services/restaurant.service.js";
-import { getPublicOrder } from "../services/order.service.js";
+import { getPublicOrder, getPublicOrderSession } from "../services/order.service.js";
 import {
   ORDER_CREATED,
   ORDER_ETA_UPDATED,
@@ -19,6 +19,10 @@ function restaurantRoom(restaurantId) {
 
 function orderRoom(trackingToken) {
   return `order:${trackingToken}`;
+}
+
+function orderSessionRoom(orderingSessionToken) {
+  return `order-session:${orderingSessionToken}`;
 }
 
 function readSocketToken(socket) {
@@ -83,10 +87,29 @@ async function subscribeToPublicOrder(socket, input, acknowledgement) {
   }
 }
 
+async function subscribeToPublicOrderSession(socket, input, acknowledgement) {
+  const orderingSessionToken = input?.orderingSessionToken;
+  if (!trackingTokenPattern.test(orderingSessionToken ?? "") || typeof input?.tableQrToken !== "string") {
+    acknowledge(acknowledgement, validationError("Order session not found"));
+    return;
+  }
+  try {
+    await getPublicOrderSession(input.tableQrToken, orderingSessionToken);
+    const room = orderSessionRoom(orderingSessionToken);
+    await socket.join(room);
+    socket.data.orderSessionRooms ??= new Set();
+    socket.data.orderSessionRooms.add(room);
+    acknowledge(acknowledgement, { ok: true });
+  } catch {
+    acknowledge(acknowledgement, validationError("Order session not found"));
+  }
+}
+
 function registerEventForwarders(io) {
   const forward = (eventName, payload) => {
     io.to(restaurantRoom(payload.restaurantId)).emit(eventName, payload.ownerOrder);
     io.to(orderRoom(payload.trackingToken)).emit(eventName, payload.publicOrder);
+    if (payload.orderingSessionToken) io.to(orderSessionRoom(payload.orderingSessionToken)).emit(eventName, payload.publicOrder);
   };
 
   const handlers = new Map([
@@ -138,6 +161,10 @@ export function createRealtimeServer(httpServer) {
 
     socket.on("order:subscribe", (input, acknowledgement) => {
       subscribeToPublicOrder(socket, input, acknowledgement);
+    });
+
+    socket.on("order-session:subscribe", (input, acknowledgement) => {
+      subscribeToPublicOrderSession(socket, input, acknowledgement);
     });
   });
 
