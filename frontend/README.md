@@ -11,7 +11,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Set `VITE_API_BASE_URL` to the backend API base URL, for example `http://localhost:3000/api`. Configure the matching browser origin in the backend `CORS_ORIGINS` variable. Do not put database credentials, JWT signing secrets, or other privileged values in this file.
+Set `VITE_API_BASE_URL` to the backend API base URL, for example `http://localhost:3000/api`. Optionally set `VITE_SOCKET_URL` to `http://localhost:3000`; otherwise the socket URL is derived from the API URL. Configure the matching browser origin in the backend `CORS_ORIGINS` variable. Do not put database credentials, JWT signing secrets, or other privileged values in this file.
 
 ## Commands
 
@@ -45,4 +45,6 @@ npm run dev
 npm run dev
 ```
 
-The backend must have `CORS_ORIGINS=http://localhost:5173` (or the actual Vite origin). Live database persistence requires the backend Supabase environment variables and migrations to be configured first. The frontend currently polls order status and supports cash only; real-time updates and UPI are intentionally deferred.
+The backend must have `CORS_ORIGINS=http://localhost:5173` (or the actual Vite origin). Live database persistence requires the backend Supabase environment variables and migrations to be configured first. Socket.IO notifications are best-effort; HTTP remains authoritative and polling recovers missed updates. UPI is intentionally deferred.
+
+Owner order pages authenticate the socket with the current JWT and emit `restaurant:subscribe`. Customer tracking pages emit `order:subscribe` with their tracking token. The frontend cleans up socket listeners when pages or restaurants change, refetches through HTTP after reconnecting, and keeps polling as a recovery fallback.

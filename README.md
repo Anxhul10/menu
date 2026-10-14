@@ -40,7 +40,7 @@ npm run dev
 
 The API is available at `http://localhost:3000`. Check it with `curl http://localhost:3000/api/health`.
 
-The Vite frontend uses `VITE_API_BASE_URL=http://localhost:3000/api`. Start it separately with `cd frontend && npm run dev`. The backend allowlist in `CORS_ORIGINS` must include the browser origin serving the frontend.
+The Vite frontend uses `VITE_API_BASE_URL=http://localhost:3000/api`. Socket.IO may be configured with `VITE_SOCKET_URL=http://localhost:3000`; otherwise it is derived from the API URL. Start it separately with `cd frontend && npm run dev`. The backend allowlist in `CORS_ORIGINS` must include the browser origin serving the frontend.
 
 ## Authentication API
 
@@ -360,4 +360,25 @@ The owner flow is: register/login → create or select a restaurant → manage c
 
 Backend tests use isolated Prisma-shaped repository mocks and do not prove connectivity to Supabase. A live persistence check requires valid local `DATABASE_URL`/`DIRECT_URL` values, applied migrations, and a running backend. No live Supabase workflow was claimed or executed in this environment.
 
-Known limitations for later phases: order updates use polling rather than Socket.IO, only cash payments are supported, and deployment configuration is not included.
+Known limitations for later phases: Socket.IO notifications are best-effort and HTTP polling recovers missed updates, only cash payments are supported, and deployment configuration is not included.
+
+## Phase 10 realtime events
+
+The production server is created in `src/server.js` as an HTTP server shared by Express and Socket.IO. Socket connections may authenticate with the same JWT using `auth: { token }`. An authenticated client must emit `restaurant:subscribe` with a restaurant ID; the server checks the JWT owner relationship before joining that room. Customers use `order:subscribe` with the existing secure order tracking token and receive only the public order representation.
+
+Events emitted by the server are:
+
+- `order:created` — sent to the authorized restaurant room and any subscribed tracking-token room after a guest order commits.
+- `order:updated` — sent after status or cash-payment changes commit.
+- `order:eta_updated` — sent after an ETA update commits.
+
+Example owner subscription:
+
+```js
+socket.emit("restaurant:subscribe", { restaurantId }, (result) => {
+  if (!result.ok) console.error(result.error);
+});
+socket.on("order:created", (order) => console.log(order.orderId, order.status));
+```
+
+Event payloads contain the same server-presented order fields as the corresponding HTTP APIs. The owner payload is scoped to the authorized restaurant; the customer payload omits internal IDs and contact details. Socket.IO is a notification channel, not a durable queue: disconnected clients re-fetch through HTTP after reconnecting, and a future multi-instance deployment may require an outbox and adapter.

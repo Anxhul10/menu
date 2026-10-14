@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../database/prisma.js";
 import { AppError } from "../errors/app-error.js";
 import { getRestaurant } from "./restaurant.service.js";
+import { ORDER_CREATED, ORDER_ETA_UPDATED, ORDER_UPDATED, publishOrderEvent } from "../realtime/order-events.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const orderStatuses = new Set(["PENDING", "ACCEPTED", "REJECTED", "PREPARING", "READY", "COMPLETED", "CANCELLED"]);
@@ -145,6 +146,27 @@ function presentOrder(order, { includeTrackingToken = false } = {}) {
   return result;
 }
 
+async function publishPersistedOrder(orderId, eventName) {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: ownerOrderSelect
+    });
+    if (!order) return;
+
+    const ownerOrder = presentOrder(order);
+    const publicOrder = await getPublicOrder(order.trackingToken);
+    publishOrderEvent(eventName, {
+      restaurantId: order.restaurantId,
+      trackingToken: order.trackingToken,
+      ownerOrder,
+      publicOrder
+    });
+  } catch (error) {
+    console.error("Unable to publish order update", error.message);
+  }
+}
+
 async function activeTableByToken(transaction, tableQrToken) {
   if (typeof tableQrToken !== "string" || tableQrToken.length < 32 || tableQrToken.length > 100) {
     throw new AppError("Invalid or inactive table QR token", 400);
@@ -238,6 +260,7 @@ export async function createPublicOrder(input) {
         (transaction) => createOrderTransaction(transaction, { tableQrToken: input.tableQrToken, order: orderInput }),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
       );
+      await publishPersistedOrder(order.id, ORDER_CREATED);
       return presentOrder(order, { includeTrackingToken: true });
     } catch (error) {
       if (error.code !== "P2034" || attempt === 2) throw error;
@@ -338,7 +361,9 @@ export async function updateOrderStatus(ownerId, restaurantId, orderId, input) {
     throw new AppError("Order changed before this update could be applied", 409);
   }
 
-  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
+  const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);
+  await publishPersistedOrder(updatedOrder.id, ORDER_UPDATED);
+  return presentOrder(updatedOrder);
 }
 
 export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
@@ -362,7 +387,9 @@ export async function updateOrderEta(ownerId, restaurantId, orderId, input) {
     throw new AppError("Order changed before this update could be applied", 409);
   }
 
-  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
+  const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);
+  await publishPersistedOrder(updatedOrder.id, ORDER_ETA_UPDATED);
+  return presentOrder(updatedOrder);
 }
 
 export async function collectCashPayment(ownerId, restaurantId, orderId) {
@@ -395,5 +422,7 @@ export async function collectCashPayment(ownerId, restaurantId, orderId) {
     throw new AppError("Order payment changed before collection could be recorded", 409);
   }
 
-  return presentOrder(await ownedOrder(ownerId, restaurantId, orderId));
+  const updatedOrder = await ownedOrder(ownerId, restaurantId, orderId);
+  await publishPersistedOrder(updatedOrder.id, ORDER_UPDATED);
+  return presentOrder(updatedOrder);
 }

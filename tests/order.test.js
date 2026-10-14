@@ -24,6 +24,7 @@ const database = vi.hoisted(() => ({
 vi.mock("../src/database/prisma.js", () => database);
 
 const { app } = await import("../src/app.js");
+const { orderEvents } = await import("../src/realtime/order-events.js");
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const otherOwnerId = "33333333-3333-4333-8333-333333333333";
@@ -171,12 +172,14 @@ describe("POST /api/public/orders", () => {
 
   it("rolls back when an order item cannot be created", async () => {
     database.prisma.orderItem.create.mockRejectedValue(new Error("write failed"));
+    const eventSpy = vi.spyOn(orderEvents, "emit");
 
     const response = await request(app).post("/api/public/orders").send(validOrder());
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: { message: "Internal server error" } });
     expect(database.prisma.$transaction).toHaveBeenCalled();
+    expect(eventSpy).not.toHaveBeenCalledWith("order:created", expect.anything());
   });
 });
 
