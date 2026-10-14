@@ -6,7 +6,9 @@ describe("cart utilities", () => {
     const item = { id: "item-1", name: "Pizza", price: "12.50" };
 
     expect(addToCart([], item)).toEqual([{ ...item, quantity: 1 }]);
-    expect(addToCart(addToCart([], item), item)).toEqual([{ ...item, quantity: 2 }]);
+    expect(addToCart(addToCart([], item), item)).toEqual([
+      { ...item, quantity: 2 },
+    ]);
   });
 
   it("updates quantities and removes zero-quantity items", () => {

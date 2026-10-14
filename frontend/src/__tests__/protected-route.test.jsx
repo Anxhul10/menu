@@ -19,7 +19,9 @@ describe("protected routes", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByText("Login screen")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Login screen")).toBeInTheDocument(),
+    );
     expect(screen.queryByText("Owner dashboard")).not.toBeInTheDocument();
   });
 });

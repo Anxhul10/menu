@@ -15,12 +15,20 @@ export function parseMenuQrValue(value) {
   try {
     const url = new URL(value.trim(), window.location.origin);
     const allowedOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN;
-    const isAllowedOrigin = url.origin === window.location.origin || (allowedOrigin && url.origin === allowedOrigin);
-    if (!isAllowedOrigin || !["http:", "https:"].includes(url.protocol)) return null;
+    const isAllowedOrigin =
+      url.origin === window.location.origin ||
+      (allowedOrigin && url.origin === allowedOrigin);
+    if (!isAllowedOrigin || !["http:", "https:"].includes(url.protocol))
+      return null;
 
     const match = url.pathname.match(/^\/r\/([^/]+)\/t\/([^/]+)$/);
-    if (!match || !slugPattern.test(match[1]) || !isValidTableCode(match[2])) return null;
-    return { slug: match[1], token: match[2], path: tableMenuPath(match[1], match[2]) };
+    if (!match || !slugPattern.test(match[1]) || !isValidTableCode(match[2]))
+      return null;
+    return {
+      slug: match[1],
+      token: match[2],
+      path: tableMenuPath(match[1], match[2]),
+    };
   } catch {
     return null;
   }

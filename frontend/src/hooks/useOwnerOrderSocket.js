@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createMenuSocket } from "../realtime/socket-client";
 
-export default function useOwnerOrderSocket(restaurantId, { onEvent, onReconnect }) {
+export default function useOwnerOrderSocket(
+  restaurantId,
+  { onEvent, onReconnect },
+) {
   const eventRef = useRef(onEvent);
   const reconnectRef = useRef(onReconnect);
   const [status, setStatus] = useState("offline");
@@ -34,7 +37,8 @@ export default function useOwnerOrderSocket(restaurantId, { onEvent, onReconnect
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
-    for (const eventName of eventNames) socket.on(eventName, (order) => eventRef.current?.(order));
+    for (const eventName of eventNames)
+      socket.on(eventName, (order) => eventRef.current?.(order));
 
     return () => {
       socket.emit("restaurant:unsubscribe", { restaurantId });

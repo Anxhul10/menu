@@ -9,7 +9,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!getToken()) return;
-    api.me().then(setSession).catch(() => { clearToken(); setSession(null); }).finally(() => setLoading(false));
+    api
+      .me()
+      .then(setSession)
+      .catch(() => {
+        clearToken();
+        setSession(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   async function authenticate(method, body) {
@@ -24,7 +31,16 @@ export function AuthProvider({ children }) {
     setSession(null);
   }
 
-  const value = useMemo(() => ({ session, loading, login: (body) => authenticate("login", body), register: (body) => authenticate("register", body), logout }), [session, loading]);
+  const value = useMemo(
+    () => ({
+      session,
+      loading,
+      login: (body) => authenticate("login", body),
+      register: (body) => authenticate("register", body),
+      logout,
+    }),
+    [session, loading],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

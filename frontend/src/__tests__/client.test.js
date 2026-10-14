@@ -33,10 +33,12 @@ describe("API client", () => {
 
     const [, loginOptions] = fetch.mock.calls[1];
     expect(loginOptions.headers.get("Content-Type")).toBe("application/json");
-    expect(loginOptions.body).toBe(JSON.stringify({
-      email: "owner@example.com",
-      password: "password123",
-    }));
+    expect(loginOptions.body).toBe(
+      JSON.stringify({
+        email: "owner@example.com",
+        password: "password123",
+      }),
+    );
   });
 
   it("clears expired tokens and exposes consistent API errors", async () => {
@@ -58,12 +60,14 @@ describe("API client", () => {
   });
 
   it("reports an unavailable backend without claiming success", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new TypeError("Network unavailable"));
+    global.fetch = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Network unavailable"));
 
     await expect(api.restaurants()).rejects.toMatchObject({
       name: "ApiError",
       status: 0,
-      message: "Unable to reach the Menu server."
+      message: "Unable to reach the Menu server.",
     });
   });
 });

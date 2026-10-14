@@ -7,17 +7,17 @@ const socket = vi.hoisted(() => ({
   off: vi.fn(),
   emit: vi.fn(),
   removeAllListeners: vi.fn(),
-  disconnect: vi.fn()
+  disconnect: vi.fn(),
 }));
 
 vi.mock("../realtime/socket-client", () => ({
-  createMenuSocket: vi.fn(() => socket)
+  createMenuSocket: vi.fn(() => socket),
 }));
 
 function Probe() {
   useOwnerOrderSocket("33333333-3333-4333-8333-333333333333", {
     onEvent: vi.fn(),
-    onReconnect: vi.fn()
+    onReconnect: vi.fn(),
   });
   return null;
 }
@@ -33,7 +33,7 @@ describe("owner order socket hook", () => {
     view.unmount();
 
     expect(socket.emit).toHaveBeenCalledWith("restaurant:unsubscribe", {
-      restaurantId: "33333333-3333-4333-8333-333333333333"
+      restaurantId: "33333333-3333-4333-8333-333333333333",
     });
     expect(socket.disconnect).toHaveBeenCalled();
     expect(socket.removeAllListeners).toHaveBeenCalledWith("order:created");

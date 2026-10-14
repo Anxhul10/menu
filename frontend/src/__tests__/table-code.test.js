@@ -9,10 +9,14 @@ describe("table code validation", () => {
 
   it("accepts the expected Menu table URL and rejects arbitrary URLs", () => {
     const token = "a".repeat(43);
-    expect(parseMenuQrValue(`${window.location.origin}/r/green-leaf/t/${token}`)).toMatchObject({
+    expect(
+      parseMenuQrValue(`${window.location.origin}/r/green-leaf/t/${token}`),
+    ).toMatchObject({
       slug: "green-leaf",
-      token
+      token,
     });
-    expect(parseMenuQrValue(`https://example.com/r/green-leaf/t/${token}`)).toBeNull();
+    expect(
+      parseMenuQrValue(`https://example.com/r/green-leaf/t/${token}`),
+    ).toBeNull();
   });
 });
