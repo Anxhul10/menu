@@ -31,6 +31,7 @@ model Restaurant {
   owner       User     @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   categories  MenuCategory[]
   items       MenuItem[]
+  tables      RestaurantTable[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -69,4 +70,18 @@ model MenuItem {
 
   @@index([restaurantId, categoryId])
   @@index([restaurantId, isAvailable])
+}
+
+model RestaurantTable {
+  id          String     @id @default(uuid()) @db.Uuid
+  restaurantId String    @db.Uuid
+  tableNumber String
+  qrToken     String     @unique
+  isActive    Boolean    @default(true)
+  restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([restaurantId, tableNumber])
+  @@index([restaurantId, isActive])
 }

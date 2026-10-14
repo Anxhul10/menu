@@ -12,5 +12,6 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL,
   directUrl: process.env.DIRECT_URL,
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h"
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h",
+  publicAppUrl: process.env.PUBLIC_APP_URL
 };

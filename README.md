@@ -1,6 +1,6 @@
 # Menu backend
 
-Phase 4 provides authenticated menu category and item management plus a public menu read endpoint. Prices use PostgreSQL `DECIMAL(10,2)`, unavailable items remain stored but are excluded from public menus, and category deletion is blocked while items remain assigned.
+Phase 5 provides authenticated restaurant table management, secure QR generation, and public table-token resolution alongside the menu APIs. Prices use PostgreSQL `DECIMAL(10,2)`, unavailable items remain stored but are excluded from public menus, and category deletion is blocked while items remain assigned.
 
 ## Setup
 
@@ -22,7 +22,7 @@ Phase 4 provides authenticated menu category and item management plus a public m
    npx prisma migrate dev --name init
    ```
 
-   This applies the User, Restaurant, MenuCategory, and MenuItem tables. For an existing database, apply all committed migrations with:
+   This applies the User, Restaurant, MenuCategory, MenuItem, and RestaurantTable tables. For an existing database, apply all committed migrations with:
 
    ```sh
    npx prisma migrate deploy
@@ -210,7 +210,41 @@ GET /api/public/restaurants/ashas-kitchen/menu
 
 It returns only active restaurants, categories, and available items. It excludes owner IDs and other management-only fields. Missing or inactive restaurants return `404`.
 
-The authentication, restaurant, and menu tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
+## Table and QR API
+
+Table management requires `Authorization: Bearer <token>` and verifies ownership of `:restaurantId`.
+
+- `POST /api/restaurants/:restaurantId/tables` creates a table. `tableNumber` is required, stored as a trimmed label, and must be 1–50 characters. The server generates a cryptographically random `qrToken`; clients cannot provide one.
+- `GET /api/restaurants/:restaurantId/tables` lists tables owned by the authenticated user.
+- `GET /api/restaurants/:restaurantId/tables/:tableId` retrieves one owned table.
+- `PATCH /api/restaurants/:restaurantId/tables/:tableId` updates only `tableNumber`.
+- `PATCH /api/restaurants/:restaurantId/tables/:tableId/availability` accepts `{ "isActive": false }` or `{ "isActive": true }`. Inactive tables remain stored for future historical order relationships.
+- `GET /api/restaurants/:restaurantId/tables/:tableId/qr` returns a printable PNG data URL and its customer-facing URL.
+
+The QR URL uses the configured `PUBLIC_APP_URL` and has this shape:
+
+```text
+${PUBLIC_APP_URL}/r/:restaurantSlug/t/:qrToken
+```
+
+For example, with `PUBLIC_APP_URL=https://menu.example.com`, a response is shaped like:
+
+```json
+{
+  "url": "https://menu.example.com/r/ashas-kitchen/t/random-public-token",
+  "imageDataUrl": "data:image/png;base64,..."
+}
+```
+
+The QR contains only the public frontend route, restaurant slug, and random table token. It never contains authentication credentials or private restaurant data. Save the returned `imageDataUrl` as a PNG through an API client or browser tool, then print it with the table number. The frontend route can call the public resolver:
+
+```http
+GET /api/public/tables/:qrToken
+```
+
+This unauthenticated endpoint returns only the active restaurant name/slug and table label. Invalid tokens, inactive tables, and tables belonging to inactive restaurants return `404`.
+
+The authentication, restaurant, menu, and table tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
 
 ```sh
 npm test

@@ -17,7 +17,8 @@
     "bcryptjs": "^3.0.2",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "prisma": "^6.17.0",
