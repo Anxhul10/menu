@@ -1,6 +1,6 @@
 # Menu backend
 
-Phase 1 provides the Express foundation, health endpoint, centralized error handling, and Prisma/PostgreSQL configuration. Domain models and authentication are intentionally deferred to Phase 2.
+Phase 2 provides User and Restaurant models, password-based authentication, JWT sessions, and server-side tenant ownership checks. Menu management, orders, payments, and staff membership are intentionally deferred.
 
 ## Setup
 
@@ -14,13 +14,15 @@ Phase 1 provides the Express foundation, health endpoint, centralized error hand
    npm run prisma:generate
    ```
 
+   Set `JWT_SECRET` to a long random value. `JWT_EXPIRES_IN` defaults to `1h`.
+
 5. Run the initial migration workflow after the Supabase values are configured:
 
    ```sh
    npx prisma migrate dev --name init
    ```
 
-   Phase 1 has no domain models yet, so Prisma may report that there are no schema changes. The command still verifies the configured database connection and establishes the migration workflow for Phase 2.
+   This creates the User and Restaurant tables and requires a reachable Supabase database. Never point test commands at production data.
 
 ## Run
 
@@ -30,9 +32,72 @@ npm run dev
 
 The API is available at `http://localhost:3000`. Check it with `curl http://localhost:3000/api/health`.
 
+## Authentication API
+
+Registration creates a user and their first restaurant. Email addresses are normalized to lowercase, passwords are bcrypt-hashed, and the response contains a signed access token.
+
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Asha Rao",
+  "email": "asha@example.com",
+  "password": "correct-horse-battery",
+  "restaurantName": "Asha's Kitchen",
+  "restaurantSlug": "ashas-kitchen"
+}
+```
+
+Login uses the same `email` and `password` fields:
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "asha@example.com",
+  "password": "correct-horse-battery"
+}
+```
+
+Both successful requests return a body shaped like:
+
+```json
+{
+  "user": {
+    "id": "user-uuid",
+    "name": "Asha Rao",
+    "email": "asha@example.com",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "restaurants": [
+    {
+      "id": "restaurant-uuid",
+      "name": "Asha's Kitchen",
+      "slug": "ashas-kitchen",
+      "ownerId": "user-uuid",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "token": "signed-jwt"
+}
+```
+
+Use the token to call the protected profile endpoint:
+
+```http
+GET /api/auth/me
+Authorization: Bearer signed-jwt
+```
+
+The profile query uses the user ID from the verified token and loads only that user's restaurants. Client-supplied restaurant IDs are not used as authorization evidence. Future staff access can be added with a restaurant membership model and role field.
+
 ## Tests
 
-Tests do not require a live database because the health endpoint does not access Prisma:
+The authentication tests use an in-memory Prisma-shaped repository mock, so they cannot modify production or Supabase data. A real migration still requires configured Supabase credentials.
 
 ```sh
 npm test

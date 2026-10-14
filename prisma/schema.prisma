@@ -8,4 +8,26 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Domain models are intentionally introduced in Phase 2.
+model User {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String
+  email           String       @unique
+  passwordHash    String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  ownedRestaurants Restaurant[] @relation("RestaurantOwner")
+
+  @@index([email])
+}
+
+model Restaurant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  ownerId   String   @db.Uuid
+  owner     User     @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}

@@ -10,5 +10,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port,
   databaseUrl: process.env.DATABASE_URL,
-  directUrl: process.env.DIRECT_URL
+  directUrl: process.env.DIRECT_URL,
+  jwtSecret: process.env.JWT_SECRET,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1h"
 };
