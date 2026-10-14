@@ -1,3 +1,4 @@
+import cors from "cors";
 import express from "express";
 import authRouter from "./routes/auth.routes.js";
 import healthRouter from "./routes/health.routes.js";
@@ -10,9 +11,21 @@ import orderRouter from "./routes/order.routes.js";
 import publicOrderRouter from "./routes/public-order.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { notFoundHandler } from "./middleware/not-found.middleware.js";
+import { env } from "./config/env.js";
 
 export const app = express();
 
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || env.corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, false);
+  },
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 app.use("/api", healthRouter);
 app.use("/api/auth", authRouter);

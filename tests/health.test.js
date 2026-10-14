@@ -12,6 +12,14 @@ describe("GET /api/health", () => {
       service: "menu-backend"
     });
   });
+
+  it("allows the configured frontend origin", async () => {
+    const response = await request(app)
+      .get("/api/health")
+      .set("Origin", "http://localhost:5173");
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+  });
 });
 
 describe("unknown routes", () => {

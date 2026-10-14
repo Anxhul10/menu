@@ -128,6 +128,7 @@ function presentSession(user, restaurants) {
 
 export async function registerUser(input) {
   const data = normalizeRegistrationInput(input);
+  getJwtSecret();
   const passwordHash = await bcrypt.hash(data.password, passwordRounds);
 
   const result = await prisma.$transaction(async (transaction) => {
@@ -161,6 +162,7 @@ export async function registerUser(input) {
 
 export async function loginUser(input) {
   const data = normalizeLoginInput(input);
+  getJwtSecret();
   const user = await prisma.user.findUnique({
     where: { email: data.email },
     include: {

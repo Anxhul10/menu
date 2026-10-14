@@ -1,5 +1,6 @@
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api").replace(/\/$/, "");
 const tokenKey = "menu_access_token";
+const requestTimeoutMs = 15000;
 
 export function getToken() {
   return window.sessionStorage.getItem(tokenKey);
@@ -28,10 +29,21 @@ export async function request(path, options = {}) {
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   let response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    response = await fetch(`${baseUrl}${path}`, { ...options, headers });
-  } catch {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      headers,
+      signal: options.signal || controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new ApiError("The request timed out. Please try again.", 408);
+    }
     throw new ApiError("Unable to reach the Menu server.", 0);
+  } finally {
+    clearTimeout(timeout);
   }
 
   const contentType = response.headers.get("content-type") || "";

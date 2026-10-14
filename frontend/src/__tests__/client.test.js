@@ -56,4 +56,14 @@ describe("API client", () => {
     expect(getToken()).toBeNull();
     expect(ApiError).toBeTypeOf("function");
   });
+
+  it("reports an unavailable backend without claiming success", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError("Network unavailable"));
+
+    await expect(api.restaurants()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 0,
+      message: "Unable to reach the Menu server."
+    });
+  });
 });

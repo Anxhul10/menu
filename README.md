@@ -14,7 +14,9 @@ Phase 7 provides restaurant operations for guest cash orders: filtered/paginated
    npm run prisma:generate
    ```
 
-   Set `JWT_SECRET` to a long random value. `JWT_EXPIRES_IN` defaults to `1h`.
+   Set `JWT_SECRET` to a random value of at least 32 characters. The server now fails fast at startup if it is missing or too short. Generate one with `openssl rand -base64 48`. `JWT_EXPIRES_IN` defaults to `1h`.
+
+   Set `CORS_ORIGINS` to the comma-separated frontend origins that may call the API. For local development, use `http://localhost:5173`.
 
 5. Run the initial migration workflow after the Supabase values are configured:
 
@@ -37,6 +39,8 @@ npm run dev
 ```
 
 The API is available at `http://localhost:3000`. Check it with `curl http://localhost:3000/api/health`.
+
+The Vite frontend uses `VITE_API_BASE_URL=http://localhost:3000/api`. Start it separately with `cd frontend && npm run dev`. The backend allowlist in `CORS_ORIGINS` must include the browser origin serving the frontend.
 
 ## Authentication API
 
@@ -338,3 +342,22 @@ cd frontend
 npm run build
 npm test
 ```
+
+## Phase 9 integration workflow
+
+Run the backend and frontend in separate terminals after configuring the backend `.env` and frontend `frontend/.env`:
+
+```sh
+# terminal 1
+npm run dev
+
+# terminal 2
+cd frontend
+npm run dev
+```
+
+The owner flow is: register/login → create or select a restaurant → manage categories/items → create tables and print QR codes → monitor orders → transition order status → set ETA → collect cash. The guest flow is: scan `/r/:restaurantSlug/t/:qrToken` → resolve the active table → browse available items → submit a cash order → track it with its secure tracking token. Prices, availability, ownership, payment state, and status transitions remain backend-authoritative.
+
+Backend tests use isolated Prisma-shaped repository mocks and do not prove connectivity to Supabase. A live persistence check requires valid local `DATABASE_URL`/`DIRECT_URL` values, applied migrations, and a running backend. No live Supabase workflow was claimed or executed in this environment.
+
+Known limitations for later phases: order updates use polling rather than Socket.IO, only cash payments are supported, and deployment configuration is not included.
