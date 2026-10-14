@@ -318,3 +318,23 @@ The authentication, restaurant, menu, table, and order tests use in-memory Prism
 ```sh
 npm test
 ```
+
+## Phase 8 frontend
+
+The React/Vite frontend lives in `frontend/` and consumes the backend APIs through `VITE_API_BASE_URL`. It includes owner authentication, restaurant selection, menu/category management, table QR management, order operations, and public guest ordering with cash payment.
+
+```sh
+cd frontend
+npm install
+cp .env.example .env
+# Set VITE_API_BASE_URL in .env, then:
+npm run dev
+```
+
+Build and test the frontend with:
+
+```sh
+cd frontend
+npm run build
+npm test
+```
