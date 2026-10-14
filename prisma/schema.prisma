@@ -29,8 +29,44 @@ model Restaurant {
   isActive    Boolean  @default(true)
   ownerId     String   @db.Uuid
   owner       User     @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  categories  MenuCategory[]
+  items       MenuItem[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId, isActive])
+}
+
+model MenuCategory {
+  id           String     @id @default(uuid()) @db.Uuid
+  restaurantId String     @db.Uuid
+  name         String
+  description  String?
+  sortOrder    Int        @default(0)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items        MenuItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([restaurantId, name])
+  @@unique([id, restaurantId])
+  @@index([restaurantId, sortOrder])
+}
+
+model MenuItem {
+  id           String       @id @default(uuid()) @db.Uuid
+  restaurantId String       @db.Uuid
+  categoryId   String       @db.Uuid
+  name         String
+  description  String?
+  price        Decimal      @db.Decimal(10, 2)
+  imageUrl     String?
+  isAvailable  Boolean      @default(true)
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  category     MenuCategory @relation(fields: [categoryId, restaurantId], references: [id, restaurantId], onDelete: Restrict, onUpdate: Cascade)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId, categoryId])
+  @@index([restaurantId, isAvailable])
 }

@@ -1,6 +1,6 @@
 # Menu backend
 
-Phase 3 provides authenticated restaurant management. Users can own multiple restaurants, each restaurant has a unique generated slug, and deletion archives the record instead of destroying it. Menu management, orders, payments, tables, and staff membership are intentionally deferred.
+Phase 4 provides authenticated menu category and item management plus a public menu read endpoint. Prices use PostgreSQL `DECIMAL(10,2)`, unavailable items remain stored but are excluded from public menus, and category deletion is blocked while items remain assigned.
 
 ## Setup
 
@@ -22,7 +22,7 @@ Phase 3 provides authenticated restaurant management. Users can own multiple res
    npx prisma migrate dev --name init
    ```
 
-   This applies the User and Restaurant tables. For an existing Phase 2 database, apply the Phase 3 profile migration with:
+   This applies the User, Restaurant, MenuCategory, and MenuItem tables. For an existing database, apply all committed migrations with:
 
    ```sh
    npx prisma migrate deploy
@@ -147,7 +147,70 @@ Common errors use the existing JSON shape: `401` for missing or invalid authenti
 
 ## Tests
 
-The authentication and restaurant tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. A real migration still requires configured Supabase credentials.
+## Menu API
+
+Management endpoints require `Authorization: Bearer <token>` and verify that the token owner owns `:restaurantId`.
+
+Categories:
+
+- `POST /api/restaurants/:restaurantId/categories` creates a category. `name` is required and must be 1–100 characters; `description` is optional and capped at 500 characters; `sortOrder` is an optional non-negative integer.
+- `GET /api/restaurants/:restaurantId/categories` lists categories by `sortOrder`, then creation time.
+- `PATCH /api/restaurants/:restaurantId/categories/:categoryId` updates `name`, `description`, or `sortOrder`.
+- `DELETE /api/restaurants/:restaurantId/categories/:categoryId` returns `409` while menu items remain assigned; empty categories return `204`.
+
+Items:
+
+- `POST /api/restaurants/:restaurantId/items` creates an item with required `categoryId`, `name`, and non-negative string `price`.
+- `GET /api/restaurants/:restaurantId/items` lists all management items, including unavailable items.
+- `GET /api/restaurants/:restaurantId/items/:itemId` retrieves one item.
+- `PATCH /api/restaurants/:restaurantId/items/:itemId` updates permitted fields: `categoryId`, `name`, `description`, `price`, `imageUrl`, and `isAvailable`.
+- `PATCH /api/restaurants/:restaurantId/items/:itemId/availability` changes only `isAvailable`.
+- `DELETE /api/restaurants/:restaurantId/items/:itemId` deletes an item and returns `204`; future historical-order relationships will require an archival strategy.
+
+Prices must be strings with at most two decimal places, such as `"12"`, `"12.5"`, or `"12.50"`. Values are stored as `DECIMAL(10,2)` and returned consistently as strings such as `"12.50"`. JavaScript floating-point values, negative values, and malformed amounts are rejected.
+
+Example item request:
+
+```http
+POST /api/restaurants/restaurant-uuid/items
+Authorization: Bearer signed-jwt
+Content-Type: application/json
+
+{
+  "categoryId": "category-uuid",
+  "name": "Paneer Tikka",
+  "description": "Char-grilled paneer",
+  "price": "12.50",
+  "imageUrl": "https://example.com/paneer.jpg"
+}
+```
+
+Example response:
+
+```json
+{
+  "item": {
+    "id": "item-uuid",
+    "restaurantId": "restaurant-uuid",
+    "categoryId": "category-uuid",
+    "name": "Paneer Tikka",
+    "description": "Char-grilled paneer",
+    "price": "12.50",
+    "imageUrl": "https://example.com/paneer.jpg",
+    "isAvailable": true
+  }
+}
+```
+
+The public endpoint requires no authentication:
+
+```http
+GET /api/public/restaurants/ashas-kitchen/menu
+```
+
+It returns only active restaurants, categories, and available items. It excludes owner IDs and other management-only fields. Missing or inactive restaurants return `404`.
+
+The authentication, restaurant, and menu tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
 
 ```sh
 npm test
