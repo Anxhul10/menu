@@ -5,6 +5,7 @@
   "type": "module",
   "description": "App to order using QR codes",
   "scripts": {
+    "build": "npm install && npx prisma generate",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "vitest run",
