@@ -1,400 +1,190 @@
-# Menu backend
+# Menu
 
-Phase 7 provides restaurant operations for guest cash orders: filtered/paginated order queues, guarded lifecycle transitions, estimated preparation times, and explicit cash collection. Order lines snapshot item names and prices, and cash orders remain unpaid until collection is recorded.
+**Menu** is a QR-based restaurant ordering app. Customers scan a table
+QR code to browse the menu and place orders, while restaurant owners
+manage restaurants, menus, tables, and orders from a dashboard.
 
-## Setup
+## Features
 
-1. Install Node.js 20 or newer.
-2. Copy `.env.example` to `.env`.
-3. In the Supabase dashboard, open **Project Settings → Database** and copy the pooler connection string into `DATABASE_URL`. Copy the direct connection string into `DIRECT_URL`. Replace the placeholders with the project reference, region, and database password; do not commit `.env`.
-4. Install dependencies and generate the Prisma client:
+-   Owner registration and login
+-   Manage multiple restaurants
+-   Create menu categories and items
+-   Manage tables and generate QR codes
+-   Let customers browse menus and order without signing in
+-   Keep additional orders in the same active table session
+-   Track order status and preparation time
+-   Record cash payments
+-   Receive live order updates with Socket.IO
 
-   ```sh
-   npm install
-   npm run prisma:generate
-   ```
+## Tech stack
 
-   Set `JWT_SECRET` to a random value of at least 32 characters. The server now fails fast at startup if it is missing or too short. Generate one with `openssl rand -base64 48`. `JWT_EXPIRES_IN` defaults to `1h`.
+-   React and Vite
+-   Node.js and Express
+-   PostgreSQL with Supabase
+-   Prisma ORM
+-   Socket.IO
 
-   Set `CORS_ORIGINS` to the comma-separated frontend origins that may call the API. For local development, use `http://localhost:5173`.
+## Requirements
 
-5. Run the initial migration workflow after the Supabase values are configured:
+-   Node.js 20 or newer
+-   A Supabase PostgreSQL database
 
-   ```sh
-   npx prisma migrate dev --name init
-   ```
+## Run locally
 
-   This applies the User, Restaurant, MenuCategory, MenuItem, and RestaurantTable tables. For an existing database, apply all committed migrations with:
+### 1. Configure the backend
 
-   ```sh
-   npx prisma migrate deploy
-   ```
+Copy the example environment file:
 
-   Both commands require a reachable Supabase database. Never point test commands at production data.
+``` sh
+cp .env.example .env
+```
 
-## Run
+Set these values in `.env`:
 
-```sh
+``` dotenv
+DATABASE_URL="your-supabase-pooled-connection-string"
+DIRECT_URL="your-supabase-direct-connection-string"
+JWT_SECRET="your-long-random-secret"
+CORS_ORIGINS="http://localhost:5173"
+PUBLIC_APP_URL="http://localhost:5173"
+```
+
+Use the connection strings from **Supabase → Project Settings →
+Database**. Keep `.env` private and never commit database credentials or
+secrets.
+
+### 2. Install dependencies and prepare the database
+
+From the repository root:
+
+``` sh
+npm install
+npm run prisma:generate
+npx prisma migrate deploy
+```
+
+For a brand-new development database with no migrations created yet,
+create the initial migration with:
+
+``` sh
+npx prisma migrate dev --name init
+```
+
+Do not use `prisma migrate dev` against production.
+
+### 3. Start the backend
+
+``` sh
 npm run dev
 ```
 
-The API is available at `http://localhost:3000`. Check it with `curl http://localhost:3000/api/health`.
+The backend runs at `http://localhost:3000`. Check its health endpoint:
 
-The Vite frontend uses `VITE_API_BASE_URL=http://localhost:3000/api`. Socket.IO may be configured with `VITE_SOCKET_URL=http://localhost:3000`; otherwise it is derived from the API URL. Start it separately with `cd frontend && npm run dev`. The backend allowlist in `CORS_ORIGINS` must include the browser origin serving the frontend.
-
-The customer homepage is `/`: customers can scan a Menu QR code or enter its secure public table token without signing in. Owner access is separated under `/admin`, `/admin/login`, `/admin/signup`, and `/admin/dashboard`; the older `/app` dashboard URLs remain supported.
-
-## Authentication API
-
-Registration creates a user and their first restaurant. Email addresses are normalized to lowercase, passwords are bcrypt-hashed, and the response contains a signed access token.
-
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "name": "Asha Rao",
-  "email": "asha@example.com",
-  "password": "correct-horse-battery",
-  "restaurantName": "Asha's Kitchen",
-  "restaurantSlug": "ashas-kitchen"
-}
+``` sh
+curl http://localhost:3000/api/health
 ```
 
-Login uses the same `email` and `password` fields:
+### 4. Start the frontend
 
-```http
-POST /api/auth/login
-Content-Type: application/json
+In a second terminal:
 
-{
-  "email": "asha@example.com",
-  "password": "correct-horse-battery"
-}
-```
-
-Both successful requests return a body shaped like:
-
-```json
-{
-  "user": {
-    "id": "user-uuid",
-    "name": "Asha Rao",
-    "email": "asha@example.com",
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  },
-  "restaurants": [
-    {
-      "id": "restaurant-uuid",
-      "name": "Asha's Kitchen",
-      "slug": "ashas-kitchen",
-      "ownerId": "user-uuid",
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z"
-    }
-  ],
-  "token": "signed-jwt"
-}
-```
-
-Use the token to call the protected profile endpoint:
-
-```http
-GET /api/auth/me
-Authorization: Bearer signed-jwt
-```
-
-The profile query uses the user ID from the verified token and loads only that user's restaurants. Client-supplied restaurant IDs are not used as authorization evidence. Future staff access can be added with a restaurant membership model and role field.
-
-## Restaurant management API
-
-All restaurant endpoints require `Authorization: Bearer <token>` from registration or login. Restaurant ownership is always derived from the verified token; a request-body `ownerId` is ignored.
-
-- `POST /api/restaurants` creates a restaurant. Required: `name` (2–120 characters). Optional: `description` and `address` (strings up to 500 characters). The slug is generated from the name and receives a numeric suffix when needed.
-- `GET /api/restaurants` lists active restaurants owned by the authenticated user.
-- `GET /api/restaurants/:id` returns an owned active restaurant. Missing or unauthorized IDs return the same `404 Restaurant not found` response.
-- `PATCH /api/restaurants/:id` updates `name`, `description`, and/or `address`. At least one permitted field is required. The existing slug is preserved when the name changes so public links do not unexpectedly break.
-- `DELETE /api/restaurants/:id` archives the restaurant by setting `isActive` to `false`; it does not delete rows or cascade into future historical records.
-
-Create example:
-
-```http
-POST /api/restaurants
-Authorization: Bearer signed-jwt
-Content-Type: application/json
-
-{
-  "name": "Asha's Kitchen",
-  "description": "Seasonal Indian food",
-  "address": "1 Market Street"
-}
-```
-
-Successful responses wrap the resource:
-
-```json
-{
-  "restaurant": {
-    "id": "restaurant-uuid",
-    "name": "Asha's Kitchen",
-    "slug": "ashas-kitchen",
-    "description": "Seasonal Indian food",
-    "address": "1 Market Street",
-    "isActive": true,
-    "ownerId": "user-uuid",
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  }
-}
-```
-
-Common errors use the existing JSON shape: `401` for missing or invalid authentication, `400` for invalid input, `404` for missing or unauthorized restaurants, `409` for a database uniqueness conflict, and `500` for unexpected server errors.
-
-## Tests
-
-## Menu API
-
-Management endpoints require `Authorization: Bearer <token>` and verify that the token owner owns `:restaurantId`.
-
-Categories:
-
-- `POST /api/restaurants/:restaurantId/categories` creates a category. `name` is required and must be 1–100 characters; `description` is optional and capped at 500 characters; `sortOrder` is an optional non-negative integer.
-- `GET /api/restaurants/:restaurantId/categories` lists categories by `sortOrder`, then creation time.
-- `PATCH /api/restaurants/:restaurantId/categories/:categoryId` updates `name`, `description`, or `sortOrder`.
-- `DELETE /api/restaurants/:restaurantId/categories/:categoryId` returns `409` while menu items remain assigned; empty categories return `204`.
-
-Items:
-
-- `POST /api/restaurants/:restaurantId/items` creates an item with required `categoryId`, `name`, and non-negative string `price`.
-- `GET /api/restaurants/:restaurantId/items` lists all management items, including unavailable items.
-- `GET /api/restaurants/:restaurantId/items/:itemId` retrieves one item.
-- `PATCH /api/restaurants/:restaurantId/items/:itemId` updates permitted fields: `categoryId`, `name`, `description`, `price`, `imageUrl`, and `isAvailable`.
-- `PATCH /api/restaurants/:restaurantId/items/:itemId/availability` changes only `isAvailable`.
-- `DELETE /api/restaurants/:restaurantId/items/:itemId` deletes an item and returns `204`; future historical-order relationships will require an archival strategy.
-
-Prices must be strings with at most two decimal places, such as `"12"`, `"12.5"`, or `"12.50"`. Values are stored as `DECIMAL(10,2)` and returned consistently as strings such as `"12.50"`. JavaScript floating-point values, negative values, and malformed amounts are rejected.
-
-Example item request:
-
-```http
-POST /api/restaurants/restaurant-uuid/items
-Authorization: Bearer signed-jwt
-Content-Type: application/json
-
-{
-  "categoryId": "category-uuid",
-  "name": "Paneer Tikka",
-  "description": "Char-grilled paneer",
-  "price": "12.50",
-  "imageUrl": "https://example.com/paneer.jpg"
-}
-```
-
-Example response:
-
-```json
-{
-  "item": {
-    "id": "item-uuid",
-    "restaurantId": "restaurant-uuid",
-    "categoryId": "category-uuid",
-    "name": "Paneer Tikka",
-    "description": "Char-grilled paneer",
-    "price": "12.50",
-    "imageUrl": "https://example.com/paneer.jpg",
-    "isAvailable": true
-  }
-}
-```
-
-The public endpoint requires no authentication:
-
-```http
-GET /api/public/restaurants/ashas-kitchen/menu
-```
-
-It returns only active restaurants, categories, and available items. It excludes owner IDs and other management-only fields. Missing or inactive restaurants return `404`.
-
-## Table and QR API
-
-Table management requires `Authorization: Bearer <token>` and verifies ownership of `:restaurantId`.
-
-- `POST /api/restaurants/:restaurantId/tables` creates a table. `tableNumber` is required, stored as a trimmed label, and must be 1–50 characters. The server generates a cryptographically random `qrToken`; clients cannot provide one.
-- `GET /api/restaurants/:restaurantId/tables` lists tables owned by the authenticated user.
-- `GET /api/restaurants/:restaurantId/tables/:tableId` retrieves one owned table.
-- `PATCH /api/restaurants/:restaurantId/tables/:tableId` updates only `tableNumber`.
-- `PATCH /api/restaurants/:restaurantId/tables/:tableId/availability` accepts `{ "isActive": false }` or `{ "isActive": true }`. Inactive tables remain stored for future historical order relationships.
-- `GET /api/restaurants/:restaurantId/tables/:tableId/qr` returns a printable PNG data URL and its customer-facing URL.
-- `DELETE /api/restaurants/:restaurantId/tables/:tableId` deletes an owned table only when it has no order history. Tables with orders return `409` and must be deactivated instead, preserving historical relationships.
-
-The QR URL uses the configured `PUBLIC_APP_URL` and has this shape:
-
-```text
-${PUBLIC_APP_URL}/r/:restaurantSlug/t/:qrToken
-```
-
-For example, with `PUBLIC_APP_URL=https://menu.example.com`, a response is shaped like:
-
-```json
-{
-  "url": "https://menu.example.com/r/ashas-kitchen/t/random-public-token",
-  "imageDataUrl": "data:image/png;base64,..."
-}
-```
-
-The QR contains only the public frontend route, restaurant slug, and random table token. It never contains authentication credentials or private restaurant data. Save the returned `imageDataUrl` as a PNG through an API client or browser tool, then print it with the table number. The frontend route can call the public resolver:
-
-```http
-GET /api/public/tables/:qrToken
-```
-
-This unauthenticated endpoint returns only the active restaurant name/slug and table label. Invalid tokens, inactive tables, and tables belonging to inactive restaurants return `404`.
-
-## Ordering API
-
-Guest order creation requires no authentication:
-
-```http
-POST /api/public/orders
-Content-Type: application/json
-
-{
-  "tableQrToken": "random-public-table-token",
-  "paymentMethod": "CASH",
-  "customerName": "Sam",
-  "items": [
-    {
-      "menuItemId": "item-uuid",
-      "quantity": 2
-    }
-  ]
-}
-```
-
-The server resolves the QR token to an active table and restaurant, revalidates every item against that restaurant’s current availability, calculates all subtotals and the total, and stores the item name and price snapshots. Client prices, subtotals, totals, restaurant IDs, and owner IDs are ignored because they are not accepted as trusted order fields.
-
-Successful creation returns an unguessable tracking token:
-
-```json
-{
-  "order": {
-    "orderId": "order-uuid",
-    "trackingToken": "random-order-tracking-token",
-    "status": "PENDING",
-    "paymentMethod": "CASH",
-    "paymentStatus": "PAYMENT_DUE",
-    "totalAmount": "25.00",
-    "items": [
-      {
-        "itemName": "Paneer Tikka",
-        "unitPrice": "12.50",
-        "quantity": 2,
-        "lineSubtotal": "25.00"
-      }
-    ]
-  }
-}
-```
-
-Use `GET /api/public/orders/:trackingToken` for customer tracking. The tracking token, not the order UUID, is the public bearer credential. The response excludes customer contact details and internal restaurant/table IDs.
-
-Owner order endpoints require `Authorization: Bearer <token>` and verify restaurant ownership:
-
-- `GET /api/restaurants/:restaurantId/orders?page=1&pageSize=20&status=PENDING` lists orders newest first with pagination and an optional status filter. `pageSize` is limited to 100.
-- `GET /api/restaurants/:restaurantId/orders/:orderId` retrieves one order.
-- `PATCH /api/restaurants/:restaurantId/orders/:orderId/status` changes status through the server state machine.
-- `PATCH /api/restaurants/:restaurantId/orders/:orderId/eta` accepts `{ "estimatedMinutes": 20 }`; the server stores the deadline and `etaSetAt`. Minutes must be between 1 and 240.
-- `PATCH /api/restaurants/:restaurantId/orders/:orderId/payment` records cash collection; it takes no client-supplied amount and cannot alter the order total.
-
-Allowed status transitions are:
-
-```text
-PENDING → ACCEPTED | REJECTED | CANCELLED
-ACCEPTED → PREPARING | CANCELLED
-PREPARING → READY | CANCELLED
-READY → COMPLETED
-```
-
-`REJECTED`, `CANCELLED`, and `COMPLETED` are terminal. `completedAt` is set only when an order enters `COMPLETED`; `estimatedReadyAt` remains a separate expected timestamp. Payment status is separate from order status: every new cash order starts as `PAYMENT_DUE`, and collection sets `paymentStatus=PAID` plus `paymentCollectedAt`. Duplicate collection returns `409`, and order-status changes never mark payment collected.
-
-Order creation runs in a serializable Prisma transaction and retries serialization conflicts. Menu availability and prices are re-read inside that transaction; an unavailable or foreign item rejects the complete order, and item/order creation cannot partially commit. Status and payment writes use conditional `updateMany` predicates containing the previously observed status/payment state, so a concurrent dashboard request affects zero rows and returns `409` instead of silently overwriting the other update. This is optimistic compare-and-set protection; clients should refresh after a conflict.
-
-The authentication, restaurant, menu, table, and order tests use in-memory Prisma-shaped repository mocks, so they cannot modify production or Supabase data. Apply migrations separately with `npx prisma migrate deploy`.
-
-Guest order batches use a server-generated `orderingSessionToken`. The token is returned only when a batch is created and is kept in browser `sessionStorage`, scoped to the table QR token; it is not placed in public URLs. `GET /api/public/orders/session/:orderingSessionToken?tableQrToken=...` returns all batches for that table/session. Each submitted cart remains a separate order batch. The customer summary subscribes to an authorized session room and falls back to HTTP refresh after reconnecting.
-
-ETA countdowns use the persisted `estimatedReadyAt` deadline, so adding another batch never resets an existing countdown. Revisions replace the deadline from the moment the server accepts the new minute value; countdown expiry never changes order status automatically.
-
-Tables now expose persisted `isOccupied` state. A successful first order atomically marks the table occupied and assigns its active ordering-session token. Additional batches must use that active token. `PATCH /api/restaurants/:restaurantId/tables/:tableId/reset` requires ownership and resets only when all table orders are terminal (`COMPLETED`, `REJECTED`, or `CANCELLED`) and no payment remains due. Reset preserves all order history and invalidates the previous session; the next order starts a new session. Scanning a QR code alone never occupies a table.
-
-After pulling these schema changes into an environment, run:
-
-```sh
-npx prisma migrate deploy
-npx prisma generate
-```
-
-```sh
-npm test
-```
-
-## Phase 8 frontend
-
-The React/Vite frontend lives in `frontend/` and consumes the backend APIs through `VITE_API_BASE_URL`. It includes owner authentication, restaurant selection, menu/category management, table QR management, order operations, and public guest ordering with cash payment.
-
-```sh
+``` sh
 cd frontend
 npm install
 cp .env.example .env
-# Set VITE_API_BASE_URL in .env, then:
+```
+
+Set the frontend variables in `frontend/.env`:
+
+``` dotenv
+VITE_API_BASE_URL=http://localhost:3000/api
+VITE_SOCKET_URL=http://localhost:3000
+VITE_PUBLIC_APP_ORIGIN=http://localhost:5173
+```
+
+Then run:
+
+``` sh
 npm run dev
 ```
 
-Build and test the frontend with:
+The frontend runs at `http://localhost:5173`.
 
-```sh
+## Production environment
+
+Configure environment variables in your hosting provider rather than
+committing them to Git.
+
+For the deployed frontend, set:
+
+``` dotenv
+VITE_API_BASE_URL=https://YOUR-BACKEND-DOMAIN/api
+VITE_SOCKET_URL=https://YOUR-BACKEND-DOMAIN
+VITE_PUBLIC_APP_ORIGIN=https://YOUR-FRONTEND-DOMAIN
+```
+
+On the backend, set the production database connection strings, a strong
+`JWT_SECRET`, `CORS_ORIGINS` to your frontend origin, and
+`PUBLIC_APP_URL` to the public frontend URL. After changing Vite
+environment variables, rebuild or redeploy the frontend.
+
+## Main routes
+
+-   `/` --- Customer landing page and QR ordering entry
+-   `/r/:restaurantSlug/t/:qrToken` --- Customer menu for a table
+-   `/admin/login` --- Owner login
+-   `/admin/signup` --- Owner registration
+-   `/admin/dashboard` --- Owner dashboard
+
+## API overview
+
+Most owner endpoints require:
+
+``` http
+Authorization: Bearer <token>
+```
+
+Main API groups:
+
+-   `/api/auth` --- Register, login, and current user
+-   `/api/restaurants` --- Restaurant management
+-   `/api/restaurants/:restaurantId/categories` --- Menu categories
+-   `/api/restaurants/:restaurantId/items` --- Menu items
+-   `/api/restaurants/:restaurantId/tables` --- Tables and QR codes
+-   `/api/restaurants/:restaurantId/orders` --- Owner order management
+-   `/api/public/restaurants/:slug/menu` --- Public menu
+-   `/api/public/tables/:qrToken` --- Resolve a table QR code
+-   `/api/public/orders` --- Place a customer order
+-   `/api/public/orders/:trackingToken` --- Track an order
+-   `/api/health` --- Health check
+
+## Tests and build
+
+Backend tests:
+
+``` sh
+npm test
+```
+
+Frontend build and tests:
+
+``` sh
 cd frontend
 npm run build
 npm test
 ```
 
-## Phase 9 integration workflow
+Backend tests use mocked repositories; they do not verify connectivity
+to the live Supabase database. Test production database connectivity
+separately before launch.
 
-Run the backend and frontend in separate terminals after configuring the backend `.env` and frontend `frontend/.env`:
+## Order flow
 
-```sh
-# terminal 1
-npm run dev
+1.  An owner creates a restaurant, menu, and tables.
+2.  The owner generates and prints each table's QR code.
+3.  A customer scans the QR code and places an order.
+4.  The owner updates the order status and preparation estimate.
+5.  The owner records cash collection when payment is received.
 
-# terminal 2
-cd frontend
-npm run dev
-```
-
-The owner flow is: register/login → create or select a restaurant → manage categories/items → create tables and print QR codes → monitor orders → transition order status → set ETA → collect cash. The guest flow is: scan `/r/:restaurantSlug/t/:qrToken` → resolve the active table → browse available items → submit a cash order → track it with its secure tracking token. Prices, availability, ownership, payment state, and status transitions remain backend-authoritative.
-
-Backend tests use isolated Prisma-shaped repository mocks and do not prove connectivity to Supabase. A live persistence check requires valid local `DATABASE_URL`/`DIRECT_URL` values, applied migrations, and a running backend. No live Supabase workflow was claimed or executed in this environment.
-
-Known limitations for later phases: Socket.IO notifications are best-effort and HTTP polling recovers missed updates, only cash payments are supported, and deployment configuration is not included.
-
-## Phase 10 realtime events
-
-The production server is created in `src/server.js` as an HTTP server shared by Express and Socket.IO. Socket connections may authenticate with the same JWT using `auth: { token }`. An authenticated client must emit `restaurant:subscribe` with a restaurant ID; the server checks the JWT owner relationship before joining that room. Customers use `order:subscribe` with the existing secure order tracking token and receive only the public order representation.
-
-Events emitted by the server are:
-
-- `order:created` — sent to the authorized restaurant room and any subscribed tracking-token room after a guest order commits.
-- `order:updated` — sent after status or cash-payment changes commit.
-- `order:eta_updated` — sent after an ETA update commits.
-
-Example owner subscription:
-
-```js
-socket.emit("restaurant:subscribe", { restaurantId }, (result) => {
-  if (!result.ok) console.error(result.error);
-});
-socket.on("order:created", (order) => console.log(order.orderId, order.status));
-```
-
-Event payloads contain the same server-presented order fields as the corresponding HTTP APIs. The owner payload is scoped to the authorized restaurant; the customer payload omits internal IDs and contact details. Socket.IO is a notification channel, not a durable queue: disconnected clients re-fetch through HTTP after reconnecting, and a future multi-instance deployment may require an outbox and adapter.
+The backend validates restaurant ownership, item availability, prices,
+order totals, and allowed order-status transitions.
