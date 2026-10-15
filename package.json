@@ -1,9 +1,9 @@
 {
-  "name": "menu-backend",
+  "name": "menu",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Backend foundation for the Menu multi-tenant restaurant ordering platform.",
+  "description": "App to order using QR codes",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
