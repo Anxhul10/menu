@@ -939,6 +939,7 @@ small {
   height: 28px;
   width: 28px;
 }
+
 .cart-bar {
   align-items: center;
   background: var(--ink);
@@ -954,8 +955,10 @@ small {
   position: fixed;
   transform: translateX(-50%);
   width: calc(100% - 2rem);
+  box-sizing: border-box;
   z-index: 5;
 }
+
 .cart-bar strong:first-child {
   background: var(--coral);
   border-radius: 50%;
@@ -963,6 +966,13 @@ small {
   margin-right: 0.35rem;
   padding: 0.18rem 0.4rem;
 }
+
+.secondary-cart-bar {
+  bottom: 5rem;
+  justify-content: center;
+  text-align: center;
+}
+
 .cart-arrow {
   color: var(--mint-strong);
 }
