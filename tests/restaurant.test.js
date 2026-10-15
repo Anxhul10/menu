@@ -9,9 +9,9 @@ const database = vi.hoisted(() => ({
       findMany: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
-      update: vi.fn()
-    }
-  }
+      update: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("../src/database/prisma.js", () => database);
@@ -23,11 +23,12 @@ const otherOwnerId = "33333333-3333-4333-8333-333333333333";
 const restaurantId = "22222222-2222-4222-8222-222222222222";
 
 function tokenFor(userId = ownerId) {
-  return jwt.sign(
-    { type: "access" },
-    process.env.JWT_SECRET,
-    { subject: userId, issuer: "menu-api", audience: "menu-client", expiresIn: "1h" }
-  );
+  return jwt.sign({ type: "access" }, process.env.JWT_SECRET, {
+    subject: userId,
+    issuer: "menu-api",
+    audience: "menu-client",
+    expiresIn: "1h",
+  });
 }
 
 function restaurant(overrides = {}) {
@@ -41,7 +42,7 @@ function restaurant(overrides = {}) {
     ownerId,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -63,15 +64,19 @@ describe("POST /api/restaurants", () => {
         name: "Spice Garden",
         description: "Indian food",
         address: "1 Market Street",
-        ownerId: otherOwnerId
+        ownerId: otherOwnerId,
       });
 
     expect(response.status).toBe(201);
     expect(response.body.restaurant.slug).toBe("spice-garden");
-    expect(database.prisma.restaurant.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ ownerId })
-    }));
-    expect(database.prisma.restaurant.create.mock.calls[0][0].data.ownerId).not.toBe(otherOwnerId);
+    expect(database.prisma.restaurant.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ ownerId }),
+      }),
+    );
+    expect(
+      database.prisma.restaurant.create.mock.calls[0][0].data.ownerId,
+    ).not.toBe(otherOwnerId);
   });
 
   it("rejects missing or invalid required fields", async () => {
@@ -81,7 +86,9 @@ describe("POST /api/restaurants", () => {
       .send({ description: "Missing name" });
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ error: { message: "name must be between 2 and 120 characters" } });
+    expect(response.body).toEqual({
+      error: { message: "name must be between 2 and 120 characters" },
+    });
     expect(database.prisma.restaurant.create).not.toHaveBeenCalled();
   });
 
@@ -89,7 +96,9 @@ describe("POST /api/restaurants", () => {
     database.prisma.restaurant.findUnique
       .mockResolvedValueOnce({ id: "44444444-4444-4444-8444-444444444444" })
       .mockResolvedValueOnce(null);
-    database.prisma.restaurant.create.mockResolvedValue(restaurant({ slug: "spice-garden-2" }));
+    database.prisma.restaurant.create.mockResolvedValue(
+      restaurant({ slug: "spice-garden-2" }),
+    );
 
     const response = await request(app)
       .post("/api/restaurants")
@@ -97,7 +106,9 @@ describe("POST /api/restaurants", () => {
       .send({ name: "Spice Garden" });
 
     expect(response.status).toBe(201);
-    expect(database.prisma.restaurant.create.mock.calls[0][0].data.slug).toBe("spice-garden-2");
+    expect(database.prisma.restaurant.create.mock.calls[0][0].data.slug).toBe(
+      "spice-garden-2",
+    );
   });
 });
 
@@ -112,7 +123,10 @@ describe("restaurant authentication and tenant isolation", () => {
   it("lists only active restaurants owned by the authenticated user", async () => {
     database.prisma.restaurant.findMany.mockResolvedValue([
       restaurant(),
-      restaurant({ id: "55555555-5555-4555-8555-555555555555", slug: "second-place" })
+      restaurant({
+        id: "55555555-5555-4555-8555-555555555555",
+        slug: "second-place",
+      }),
     ]);
 
     const response = await request(app)
@@ -121,9 +135,11 @@ describe("restaurant authentication and tenant isolation", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.restaurants).toHaveLength(2);
-    expect(database.prisma.restaurant.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { ownerId, isActive: true }
-    }));
+    expect(database.prisma.restaurant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ownerId, isActive: true },
+      }),
+    );
   });
 
   it("retrieves an owned restaurant", async () => {
@@ -133,9 +149,11 @@ describe("restaurant authentication and tenant isolation", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.restaurant.id).toBe(restaurantId);
-    expect(database.prisma.restaurant.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: restaurantId, ownerId, isActive: true }
-    }));
+    expect(database.prisma.restaurant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: restaurantId, ownerId, isActive: true },
+      }),
+    );
   });
 
   it("does not reveal another owner's restaurant", async () => {
@@ -146,13 +164,17 @@ describe("restaurant authentication and tenant isolation", () => {
       .set("Authorization", `Bearer ${tokenFor()}`);
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: { message: "Restaurant not found" } });
+    expect(response.body).toEqual({
+      error: { message: "Restaurant not found" },
+    });
   });
 });
 
 describe("PATCH and DELETE /api/restaurants/:id", () => {
   it("updates permitted fields while preserving the slug", async () => {
-    database.prisma.restaurant.update.mockResolvedValue(restaurant({ name: "New Spice Garden" }));
+    database.prisma.restaurant.update.mockResolvedValue(
+      restaurant({ name: "New Spice Garden" }),
+    );
 
     const response = await request(app)
       .patch(`/api/restaurants/${restaurantId}`)
@@ -160,11 +182,15 @@ describe("PATCH and DELETE /api/restaurants/:id", () => {
       .send({ name: "New Spice Garden", address: "2 Market Street" });
 
     expect(response.status).toBe(200);
-    expect(database.prisma.restaurant.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: restaurantId },
-      data: { name: "New Spice Garden", address: "2 Market Street" }
-    }));
-    expect(database.prisma.restaurant.update.mock.calls[0][0].data.slug).toBeUndefined();
+    expect(database.prisma.restaurant.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: restaurantId },
+        data: { name: "New Spice Garden", address: "2 Market Street" },
+      }),
+    );
+    expect(
+      database.prisma.restaurant.update.mock.calls[0][0].data.slug,
+    ).toBeUndefined();
   });
 
   it("rejects update and archive attempts for another owner's restaurant", async () => {
@@ -184,7 +210,9 @@ describe("PATCH and DELETE /api/restaurants/:id", () => {
   });
 
   it("archives instead of deleting restaurant data", async () => {
-    database.prisma.restaurant.update.mockResolvedValue(restaurant({ isActive: false }));
+    database.prisma.restaurant.update.mockResolvedValue(
+      restaurant({ isActive: false }),
+    );
 
     const response = await request(app)
       .delete(`/api/restaurants/${restaurantId}`)
@@ -192,9 +220,11 @@ describe("PATCH and DELETE /api/restaurants/:id", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.restaurant.isActive).toBe(false);
-    expect(database.prisma.restaurant.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: restaurantId },
-      data: { isActive: false }
-    }));
+    expect(database.prisma.restaurant.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: restaurantId },
+        data: { isActive: false },
+      }),
+    );
   });
 });

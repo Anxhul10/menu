@@ -5,18 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { createRealtimeServer } from "../src/realtime/socket.js";
-import { ORDER_CREATED, publishOrderEvent } from "../src/realtime/order-events.js";
+import {
+  ORDER_CREATED,
+  publishOrderEvent,
+} from "../src/realtime/order-events.js";
 
 const mocks = vi.hoisted(() => ({
   restaurantFindFirst: vi.fn(),
-  orderFindUnique: vi.fn()
+  orderFindUnique: vi.fn(),
 }));
 
 vi.mock("../src/database/prisma.js", () => ({
   prisma: {
     restaurant: { findFirst: mocks.restaurantFindFirst },
-    order: { findUnique: mocks.orderFindUnique }
-  }
+    order: { findUnique: mocks.orderFindUnique },
+  },
 }));
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -29,7 +32,7 @@ function tokenFor(subject) {
     subject,
     issuer: "menu-api",
     audience: "menu-client",
-    expiresIn: "1h"
+    expiresIn: "1h",
   });
 }
 
@@ -43,7 +46,7 @@ function ownerRestaurant() {
     isActive: true,
     ownerId: userId,
     createdAt: new Date(),
-    updatedAt: new Date()
+    updatedAt: new Date(),
   };
 }
 
@@ -66,12 +69,14 @@ function publicOrder() {
     updatedAt: new Date(),
     items: [],
     restaurant: { name: "Test Restaurant", slug: "test-restaurant" },
-    restaurantTable: { tableNumber: "1" }
+    restaurantTable: { tableNumber: "1" },
   };
 }
 
 function listen(server) {
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve(server.address().port)),
+  );
 }
 
 function closeServer(server, io) {
@@ -99,17 +104,25 @@ describe("Socket.IO realtime authorization", () => {
   });
 
   it("rejects an invalid owner token during the socket handshake", async () => {
-    const client = createClient(url, { auth: { token: "invalid-token" }, reconnection: false });
+    const client = createClient(url, {
+      auth: { token: "invalid-token" },
+      reconnection: false,
+    });
     clients.push(client);
 
-    const error = await new Promise((resolve) => client.once("connect_error", resolve));
+    const error = await new Promise((resolve) =>
+      client.once("connect_error", resolve),
+    );
 
     expect(error.message).toBe("Invalid or expired authentication token");
   });
 
   it("authorizes an owner room and forwards only the persisted owner payload", async () => {
     mocks.restaurantFindFirst.mockResolvedValue(ownerRestaurant());
-    const client = createClient(url, { auth: { token: tokenFor(userId) }, reconnection: false });
+    const client = createClient(url, {
+      auth: { token: tokenFor(userId) },
+      reconnection: false,
+    });
     clients.push(client);
     await new Promise((resolve) => client.once("connect", resolve));
 
@@ -118,14 +131,24 @@ describe("Socket.IO realtime authorization", () => {
     });
     expect(subscription).toEqual({ ok: true, restaurantId });
 
-    const ownerOrder = { orderId: "order-1", status: "PENDING", totalAmount: "12.50" };
-    const publicOrderPayload = { orderId: "order-1", status: "PENDING", totalAmount: "12.50" };
-    const received = new Promise((resolve) => client.once(ORDER_CREATED, resolve));
+    const ownerOrder = {
+      orderId: "order-1",
+      status: "PENDING",
+      totalAmount: "12.50",
+    };
+    const publicOrderPayload = {
+      orderId: "order-1",
+      status: "PENDING",
+      totalAmount: "12.50",
+    };
+    const received = new Promise((resolve) =>
+      client.once(ORDER_CREATED, resolve),
+    );
     publishOrderEvent(ORDER_CREATED, {
       restaurantId,
       trackingToken,
       ownerOrder,
-      publicOrder: publicOrderPayload
+      publicOrder: publicOrderPayload,
     });
 
     await expect(received).resolves.toEqual(ownerOrder);
@@ -133,7 +156,10 @@ describe("Socket.IO realtime authorization", () => {
 
   it("rejects a cross-tenant restaurant subscription", async () => {
     mocks.restaurantFindFirst.mockResolvedValue(null);
-    const client = createClient(url, { auth: { token: tokenFor(otherUserId) }, reconnection: false });
+    const client = createClient(url, {
+      auth: { token: tokenFor(otherUserId) },
+      reconnection: false,
+    });
     clients.push(client);
     await new Promise((resolve) => client.once("connect", resolve));
 
@@ -156,12 +182,14 @@ describe("Socket.IO realtime authorization", () => {
     expect(subscription).toEqual({ ok: true });
 
     const publicPayload = { orderId: "order-1", status: "READY" };
-    const received = new Promise((resolve) => client.once("order:updated", resolve));
+    const received = new Promise((resolve) =>
+      client.once("order:updated", resolve),
+    );
     publishOrderEvent("order:updated", {
       restaurantId,
       trackingToken,
       ownerOrder: { ...publicPayload, customerContact: "private" },
-      publicOrder: publicPayload
+      publicOrder: publicPayload,
     });
 
     await expect(received).resolves.toEqual(publicPayload);

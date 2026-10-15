@@ -9,7 +9,7 @@ describe("GET /api/health", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       status: "ok",
-      service: "menu-backend"
+      service: "menu-backend",
     });
   });
 
@@ -18,7 +18,9 @@ describe("GET /api/health", () => {
       .get("/api/health")
       .set("Origin", "http://localhost:5173");
 
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
   });
 });
 
@@ -29,8 +31,8 @@ describe("unknown routes", () => {
     expect(response.status).toBe(404);
     expect(response.body).toEqual({
       error: {
-        message: "Route not found: GET /api/unknown"
-      }
+        message: "Route not found: GET /api/unknown",
+      },
     });
   });
 });

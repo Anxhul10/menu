@@ -10,7 +10,7 @@ const database = vi.hoisted(() => ({
       findMany: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
-      delete: vi.fn()
+      delete: vi.fn(),
     },
     menuItem: {
       create: vi.fn(),
@@ -18,9 +18,9 @@ const database = vi.hoisted(() => ({
       findFirst: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
-      delete: vi.fn()
-    }
-  }
+      delete: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("../src/database/prisma.js", () => database);
@@ -35,11 +35,12 @@ const otherCategoryId = "55555555-5555-4555-8555-555555555555";
 const itemId = "66666666-6666-4666-8666-666666666666";
 
 function tokenFor(userId = ownerId) {
-  return jwt.sign(
-    { type: "access" },
-    process.env.JWT_SECRET,
-    { subject: userId, issuer: "menu-api", audience: "menu-client", expiresIn: "1h" }
-  );
+  return jwt.sign({ type: "access" }, process.env.JWT_SECRET, {
+    subject: userId,
+    issuer: "menu-api",
+    audience: "menu-client",
+    expiresIn: "1h",
+  });
 }
 
 function category(overrides = {}) {
@@ -51,7 +52,7 @@ function category(overrides = {}) {
     sortOrder: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -67,13 +68,16 @@ function item(overrides = {}) {
     isAvailable: true,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    ...overrides
+    ...overrides,
   };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  database.prisma.restaurant.findFirst.mockResolvedValue({ id: restaurantId, isActive: true });
+  database.prisma.restaurant.findFirst.mockResolvedValue({
+    id: restaurantId,
+    isActive: true,
+  });
   database.prisma.menuCategory.create.mockResolvedValue(category());
   database.prisma.menuCategory.findMany.mockResolvedValue([category()]);
   database.prisma.menuCategory.findFirst.mockResolvedValue(category());
@@ -105,10 +109,12 @@ describe("category management", () => {
     expect(listResponse.status).toBe(200);
     expect(listResponse.body.categories).toHaveLength(1);
     expect(updateResponse.status).toBe(200);
-    expect(database.prisma.menuCategory.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { restaurantId },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
-    }));
+    expect(database.prisma.menuCategory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { restaurantId },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
+    );
   });
 
   it("rejects deletion while a category contains items", async () => {
@@ -119,7 +125,11 @@ describe("category management", () => {
       .set("Authorization", `Bearer ${tokenFor()}`);
 
     expect(response.status).toBe(409);
-    expect(response.body).toEqual({ error: { message: "Category cannot be deleted while it contains menu items" } });
+    expect(response.body).toEqual({
+      error: {
+        message: "Category cannot be deleted while it contains menu items",
+      },
+    });
     expect(database.prisma.menuCategory.delete).not.toHaveBeenCalled();
   });
 
@@ -129,7 +139,9 @@ describe("category management", () => {
       .set("Authorization", `Bearer ${tokenFor()}`);
 
     expect(response.status).toBe(204);
-    expect(database.prisma.menuCategory.delete).toHaveBeenCalledWith({ where: { id: categoryId } });
+    expect(database.prisma.menuCategory.delete).toHaveBeenCalledWith({
+      where: { id: categoryId },
+    });
   });
 });
 
@@ -142,9 +154,15 @@ describe("menu item management", () => {
 
     expect(response.status).toBe(201);
     expect(response.body.item.price).toBe("12.50");
-    expect(database.prisma.menuItem.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ restaurantId, categoryId, price: "12.50" })
-    }));
+    expect(database.prisma.menuItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          restaurantId,
+          categoryId,
+          price: "12.50",
+        }),
+      }),
+    );
   });
 
   it("rejects malformed or negative prices before persistence", async () => {
@@ -164,10 +182,16 @@ describe("menu item management", () => {
     const response = await request(app)
       .post(`/api/restaurants/${restaurantId}/items`)
       .set("Authorization", `Bearer ${tokenFor()}`)
-      .send({ categoryId: otherCategoryId, name: "Wrong Tenant", price: "5.00" });
+      .send({
+        categoryId: otherCategoryId,
+        name: "Wrong Tenant",
+        price: "5.00",
+      });
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ error: { message: "Category not found for this restaurant" } });
+    expect(response.body).toEqual({
+      error: { message: "Category not found for this restaurant" },
+    });
     expect(database.prisma.menuItem.create).not.toHaveBeenCalled();
   });
 
@@ -195,15 +219,19 @@ describe("menu item management", () => {
     expect(updateResponse.status).toBe(200);
     expect(availabilityResponse.status).toBe(200);
     expect(deleteResponse.status).toBe(204);
-    expect(database.prisma.menuItem.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: { isAvailable: false }
-    }));
+    expect(database.prisma.menuItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { isAvailable: false },
+      }),
+    );
   });
 });
 
 describe("menu tenant isolation", () => {
   it("rejects unauthenticated management requests", async () => {
-    const response = await request(app).get(`/api/restaurants/${restaurantId}/items`);
+    const response = await request(app).get(
+      `/api/restaurants/${restaurantId}/items`,
+    );
 
     expect(response.status).toBe(401);
     expect(database.prisma.menuItem.findMany).not.toHaveBeenCalled();
@@ -241,33 +269,48 @@ describe("public menu", () => {
     database.prisma.restaurant.findFirst.mockResolvedValue({
       name: "Spice Garden",
       slug: "spice-garden",
-      categories: [{
-        id: categoryId,
-        name: "Mains",
-        description: null,
-        sortOrder: 1,
-        items: [item({ isAvailable: true })]
-      }]
+      categories: [
+        {
+          id: categoryId,
+          name: "Mains",
+          description: null,
+          sortOrder: 1,
+          items: [item({ isAvailable: true })],
+        },
+      ],
     });
 
-    const response = await request(app).get("/api/public/restaurants/spice-garden/menu");
+    const response = await request(app).get(
+      "/api/public/restaurants/spice-garden/menu",
+    );
 
     expect(response.status).toBe(200);
-    expect(response.body.restaurant).toEqual({ name: "Spice Garden", slug: "spice-garden" });
+    expect(response.body.restaurant).toEqual({
+      name: "Spice Garden",
+      slug: "spice-garden",
+    });
     expect(response.body.categories[0].items[0].price).toBe("12.50");
     expect(response.body).not.toHaveProperty("ownerId");
-    expect(response.body.categories[0].items).not.toContainEqual(expect.objectContaining({ ownerId }));
-    expect(database.prisma.restaurant.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { slug: "spice-garden", isActive: true }
-    }));
+    expect(response.body.categories[0].items).not.toContainEqual(
+      expect.objectContaining({ ownerId }),
+    );
+    expect(database.prisma.restaurant.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { slug: "spice-garden", isActive: true },
+      }),
+    );
   });
 
   it("returns 404 for missing or inactive restaurants", async () => {
     database.prisma.restaurant.findFirst.mockResolvedValue(null);
 
-    const response = await request(app).get("/api/public/restaurants/missing/menu");
+    const response = await request(app).get(
+      "/api/public/restaurants/missing/menu",
+    );
 
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ error: { message: "Restaurant not found" } });
+    expect(response.body).toEqual({
+      error: { message: "Restaurant not found" },
+    });
   });
 });

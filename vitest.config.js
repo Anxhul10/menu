@@ -5,6 +5,6 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["tests/setup.js"],
-    exclude: ["frontend/**", "node_modules/**"]
-  }
+    exclude: ["frontend/**", "node_modules/**"],
+  },
 });
